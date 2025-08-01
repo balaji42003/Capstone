@@ -1,8 +1,5 @@
 // Create file: app/auth/doctor-login.jsx
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-// import database from '@react-native-firebase/database'; // Temporarily disabled for Google Sign-in testing
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -30,203 +27,84 @@ try {
   );
 }
 
-const DoctorLoginScreen = () => {
+const DoctorRegistrationScreen = () => {
   const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
     name: '',
+    email: '',
     phone: '',
     license: '',
     specialization: '',
     experience: '',
     hospital: '',
-    qualification: ''
+    qualification: '',
+    address: '',
+    consultationFee: ''
   });
 
-  // Configure Google Sign-In
+  // Remove Google Sign-In configuration
   useEffect(() => {
-    const configureGoogleSignIn = async () => {
-      try {
-        GoogleSignin.configure({
-          webClientId: '425084232868-6d6muuik0hddgq228i96d9aiav7e4jke.apps.googleusercontent.com',
-          offlineAccess: false,
-          hostedDomain: '',
-          loginHint: '',
-          forceCodeForRefreshToken: false,
-          accountName: '',
-          iosClientId: '',
-          googleServicePlistPath: '',
-          openIdRealm: '',
-          profileImageSize: 120,
-        });
-        console.log('Google Sign-In configured successfully');
-      } catch (error) {
-        console.error('Google Sign-In configuration error:', error);
-      }
-    };
-    
-    configureGoogleSignIn();
+    // No Google Sign-In needed for registration
   }, []);
 
-  const handleGoogleLogin = async () => {
+  const submitRegistrationRequest = async () => {
     try {
       setIsLoading(true);
-      console.log('Starting Google Sign-In for Doctor...');
       
-      const hasPlayServices = await GoogleSignin.hasPlayServices({
-        showPlayServicesUpdateDialog: true,
-      });
-      console.log('Google Play Services available:', hasPlayServices);
-
-      try {
-        await GoogleSignin.signOut();
-        console.log('Previous user signed out');
-      } catch (signOutError) {
-        console.log('No previous user to sign out');
+      // Validation
+      const requiredFields = ['name', 'email', 'phone', 'license', 'specialization', 'experience', 'hospital', 'qualification'];
+      const missingFields = requiredFields.filter(field => !formData[field]);
+      
+      if (missingFields.length > 0) {
+        Alert.alert('Error', 'Please fill in all required fields');
+        return;
       }
 
-      console.log('Attempting Google Sign-In...');
-      const userInfo = await GoogleSignin.signIn();
-      console.log('Google Sign-In successful:', userInfo);
-
-      // Defensive check for userInfo and userInfo.data.user
-      if (!userInfo || !userInfo.data || !userInfo.data.user) {
-        throw new Error('Google Sign-In did not return user information.');
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        Alert.alert('Error', 'Please enter a valid email address');
+        return;
       }
 
-      const { user } = userInfo.data;
-
-      // Defensive check for email
-      if (!user.email) {
-        throw new Error('Google Sign-In did not return an email address.');
+      // Phone validation
+      const phoneRegex = /^[0-9]{10}$/;
+      if (!phoneRegex.test(formData.phone)) {
+        Alert.alert('Error', 'Please enter a valid 10-digit phone number');
+        return;
       }
 
-      const userData = {
-        userType: 'doctor',
-        email: user.email,
-        name: user.name || `${user.givenName || ''} ${user.familyName || ''}`.trim() || 'Dr. Google User',
-        photoURL: user.photo || null,
-        uid: user.id,
-        loginTime: new Date().toISOString(),
-        loginMethod: 'google'
+      // Submit to Firebase as pending request
+      const firebaseUrl = 'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app';
+      
+      const doctorData = {
+        ...formData,
+        verificationStatus: 'pending',
+        requestedAt: new Date().toISOString(),
+        id: `doc_${Date.now()}`,
+        specialty: formData.specialization // Add alias for compatibility
       };
 
-      // Store in AsyncStorage for local session
-      await AsyncStorage.setItem('userSession', JSON.stringify(userData));
-      console.log('Doctor session stored successfully');
+      await fetch(`${firebaseUrl}/doctors/${doctorData.id}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(doctorData)
+      });
 
-      // Try to store in Firebase Database using REST API (to avoid deprecation warnings)
-      try {
-        const firebaseUrl = 'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app';
-        
-        // Check if user exists
-        const checkResponse = await fetch(`${firebaseUrl}/doctors/${user.id}.json`);
-        const existingUser = await checkResponse.json();
+      Alert.alert(
+        'Registration Submitted!',
+        'Your registration request has been submitted successfully. You will be notified once your credentials are verified by our admin team.',
+        [
+          { text: 'OK', onPress: () => router.replace('/landing') }
+        ]
+      );
 
-        if (!existingUser) {
-          // First time login - store all credentials
-          const newUserData = {
-            ...userData,
-            createdAt: new Date().toISOString(),
-            lastLoginAt: new Date().toISOString(),
-            verificationStatus: 'pending' // Doctors need verification
-          };
-          
-          await fetch(`${firebaseUrl}/doctors/${user.id}.json`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newUserData)
-          });
-          console.log('New doctor credentials stored in Firebase Database');
-          
-          Alert.alert(
-            'Welcome Doctor!', 
-            `Account created successfully! Welcome ${userData.name}!\n\nNote: Your medical credentials will be verified before full access.`,
-            [
-              {
-                text: 'Continue',
-                onPress: () => router.replace('/doctor-dashboard')
-              }
-            ]
-          );
-        } else {
-          // User exists - just update last login time
-          const updateData = {
-            lastLoginAt: new Date().toISOString(),
-            photoURL: user.photo || existingUser.photoURL
-          };
-          
-          await fetch(`${firebaseUrl}/doctors/${user.id}.json`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updateData)
-          });
-          console.log('Doctor login time updated in Firebase Database');
-          
-          Alert.alert(
-            'Welcome Back Doctor!', 
-            `Welcome back ${existingUser.name || userData.name}!`,
-            [
-              {
-                text: 'Continue',
-                onPress: () => router.replace('/doctor-dashboard')
-              }
-            ]
-          );
-        }
-      } catch (firebaseError) {
-        console.error('Firebase error (continuing without it):', firebaseError);
-        // Navigate directly if Firebase fails
-        Alert.alert(
-          'Login Successful!', 
-          `Welcome ${userData.name}!`,
-          [
-            {
-              text: 'Continue',
-              onPress: () => router.replace('/doctor-dashboard')
-            }
-          ]
-        );
-      }
-      
     } catch (error) {
-      console.error('Google login error:', error);
-      let errorMessage = error.message || 'Google Sign-In failed';
-      Alert.alert('Login Error', errorMessage);
+      console.error('Registration error:', error);
+      Alert.alert('Error', 'Failed to submit registration. Please try again.');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleAuth = async () => {
-    try {
-      if (isLogin) {
-        const userData = {
-          userType: 'doctor',  // Ensure this is 'doctor'
-          email: formData.email,
-          name: formData.name || 'Dr. User',
-          loginTime: new Date().toISOString()
-        };
-
-        await AsyncStorage.setItem('userSession', JSON.stringify(userData));
-        
-        // Navigate to DOCTOR dashboard
-        router.replace('/doctor-dashboard');
-      } else {
-        // Registration validation
-        if (!formData.license) {
-          Alert.alert('Error', 'Medical license number is required');
-          return;
-        }
-        Alert.alert('Success', 'Doctor registration submitted for verification!', [
-          { text: 'OK', onPress: () => router.replace('/doctor-dashboard') }
-        ]);
-      }
-    } catch (error) {
-      console.error('Doctor login error:', error);
     }
   };
 
@@ -252,9 +130,9 @@ const DoctorLoginScreen = () => {
             <View style={styles.doctorIconContainer}>
               <Ionicons name="medical" size={40} color="white" />
             </View>
-            <Text style={styles.headerTitle}>Doctor {isLogin ? 'Login' : 'Registration'}</Text>
+            <Text style={styles.headerTitle}>Doctor Registration</Text>
             <Text style={styles.headerSubtitle}>
-              {isLogin ? 'Access your medical dashboard' : 'Join our medical network'}
+              Join our medical network
             </Text>
           </View>
         </LinearGradient>
@@ -267,88 +145,19 @@ const DoctorLoginScreen = () => {
               <Text style={styles.badgeText}>Verified Medical Professional Portal</Text>
             </View>
 
-            {!isLogin && (
-              <>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Full Name *</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="person-outline" size={20} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Dr. John Smith"
-                      value={formData.name}
-                      onChangeText={(text) => setFormData({...formData, name: text})}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Medical License Number *</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="card-outline" size={20} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter your medical license number"
-                      value={formData.license}
-                      onChangeText={(text) => setFormData({...formData, license: text})}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Specialization *</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="heart-outline" size={20} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="e.g., Cardiologist, Neurologist"
-                      value={formData.specialization}
-                      onChangeText={(text) => setFormData({...formData, specialization: text})}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Experience *</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="time-outline" size={20} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Years of experience"
-                      keyboardType="numeric"
-                      value={formData.experience}
-                      onChangeText={(text) => setFormData({...formData, experience: text})}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Hospital/Clinic *</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="business-outline" size={20} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Your primary workplace"
-                      value={formData.hospital}
-                      onChangeText={(text) => setFormData({...formData, hospital: text})}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Qualification *</Text>
-                  <View style={styles.inputContainer}>
-                    <Ionicons name="school-outline" size={20} color="#9CA3AF" />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="e.g., MBBS, MD, MS"
-                      value={formData.qualification}
-                      onChangeText={(text) => setFormData({...formData, qualification: text})}
-                    />
-                  </View>
-                </View>
-              </>
-            )}
+            {/* Registration Form - All fields required */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Full Name *</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="person-outline" size={20} color="#9CA3AF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Dr. John Smith"
+                  value={formData.name}
+                  onChangeText={(text) => setFormData({...formData, name: text})}
+                />
+              </View>
+            </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Professional Email *</Text>
@@ -365,83 +174,146 @@ const DoctorLoginScreen = () => {
               </View>
             </View>
 
-            {!isLogin && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone Number *</Text>
-                <View style={styles.inputContainer}>
-                  <Ionicons name="call-outline" size={20} color="#9CA3AF" />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Professional contact number"
-                    keyboardType="phone-pad"
-                    value={formData.phone}
-                    onChangeText={(text) => setFormData({...formData, phone: text})}
-                  />
-                </View>
-              </View>
-            )}
-
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password *</Text>
+              <Text style={styles.label}>Phone Number *</Text>
               <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" />
+                <Ionicons name="call-outline" size={20} color="#9CA3AF" />
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter secure password"
-                  secureTextEntry
-                  value={formData.password}
-                  onChangeText={(text) => setFormData({...formData, password: text})}
+                  placeholder="Professional contact number"
+                  keyboardType="phone-pad"
+                  value={formData.phone}
+                  onChangeText={(text) => setFormData({...formData, phone: text})}
                 />
               </View>
             </View>
 
-            {!isLogin && (
-              <View style={styles.disclaimerContainer}>
-                <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
-                <Text style={styles.disclaimerText}>
-                  Your medical credentials will be verified by our medical board before account activation.
-                </Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Medical License Number *</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="card-outline" size={20} color="#9CA3AF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your medical license number"
+                  value={formData.license}
+                  onChangeText={(text) => setFormData({...formData, license: text})}
+                />
               </View>
-            )}
+            </View>
 
-            <TouchableOpacity style={styles.authButton} onPress={handleAuth}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Specialization *</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="heart-outline" size={20} color="#9CA3AF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Cardiologist, Neurologist"
+                  value={formData.specialization}
+                  onChangeText={(text) => setFormData({...formData, specialization: text})}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Years of Experience *</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="time-outline" size={20} color="#9CA3AF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Years of experience"
+                  keyboardType="numeric"
+                  value={formData.experience}
+                  onChangeText={(text) => setFormData({...formData, experience: text})}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Hospital/Clinic *</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="business-outline" size={20} color="#9CA3AF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Your primary workplace"
+                  value={formData.hospital}
+                  onChangeText={(text) => setFormData({...formData, hospital: text})}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Medical Qualification *</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="school-outline" size={20} color="#9CA3AF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., MBBS, MD, MS"
+                  value={formData.qualification}
+                  onChangeText={(text) => setFormData({...formData, qualification: text})}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Clinic/Hospital Address *</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="location-outline" size={20} color="#9CA3AF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Complete address"
+                  multiline={true}
+                  numberOfLines={2}
+                  value={formData.address}
+                  onChangeText={(text) => setFormData({...formData, address: text})}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Consultation Fee (₹)</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="cash-outline" size={20} color="#9CA3AF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Consultation fee per session"
+                  keyboardType="numeric"
+                  value={formData.consultationFee}
+                  onChangeText={(text) => setFormData({...formData, consultationFee: text})}
+                />
+              </View>
+            </View>
+            {/* Disclaimer */}
+            <View style={styles.disclaimerContainer}>
+              <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
+              <Text style={styles.disclaimerText}>
+                Your medical credentials will be verified by our medical board before account activation.
+              </Text>
+            </View>
+
+            {/* Submit Button */}
+            <TouchableOpacity 
+              style={styles.authButton} 
+              onPress={submitRegistrationRequest}
+              disabled={isLoading}
+            >
               <LinearGradient
                 colors={['#4ECDC4', '#44A08D']}
                 style={styles.authButtonGradient}
               >
-                <Ionicons name={isLogin ? "log-in" : "person-add"} size={20} color="white" />
+                <Ionicons name="person-add" size={20} color="white" />
                 <Text style={styles.authButtonText}>
-                  {isLogin ? 'Login to Dashboard' : 'Submit for Verification'}
+                  {isLoading ? 'Submitting...' : 'Request Registration'}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Google OAuth Login Button */}
-            <TouchableOpacity
-              style={styles.googleButton}
-              onPress={handleGoogleLogin}
-              disabled={isLoading}
-            >
-              <View style={styles.googleButtonContent}>
-                <Ionicons name="logo-google" size={24} color="#DB4437" />
-                <Text style={styles.googleButtonText}>
-                  {isLoading ? 'Authenticating...' : 'Login with Google'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {isLogin && (
-              <TouchableOpacity style={styles.forgotPassword}>
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-              </TouchableOpacity>
-            )}
-
+            {/* Already Verified Link */}
             <TouchableOpacity 
-              style={styles.switchButton}
-              onPress={() => setIsLogin(!isLogin)}
+              style={styles.verifiedButton}
+              onPress={() => router.push('/auth/doctor-verification')}
             >
-              <Text style={styles.switchText}>
-                {isLogin ? "New to our network? Register as Doctor" : "Already registered? Login"}
+              <Text style={styles.verifiedText}>
+                Already Verified? Login Here
               </Text>
             </TouchableOpacity>
 
@@ -615,6 +487,17 @@ const styles = StyleSheet.create({
     color: 'white',
     marginLeft: 8,
   },
+  verifiedButton: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  verifiedText: {
+    fontSize: 16,
+    color: '#4ECDC4',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
   forgotPassword: {
     alignItems: 'center',
     marginTop: 15,
@@ -700,4 +583,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default DoctorLoginScreen;
+export default DoctorRegistrationScreen;

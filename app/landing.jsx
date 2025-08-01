@@ -168,7 +168,7 @@ const LandingScreen = () => {
                 style={[styles.loginButton, { backgroundColor: '#4ECDC4' }]}
                 onPress={() => handleUserTypeSelect('/auth/doctor-login')}
               >
-                <Text style={styles.loginButtonText}>Doctor Login</Text>
+                <Text style={styles.loginButtonText}>Doctor Registration</Text>
               </TouchableOpacity>
             </View>
           </View>

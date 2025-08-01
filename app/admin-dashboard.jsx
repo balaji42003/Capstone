@@ -26,6 +26,7 @@ const AdminDashboard = () => {
   const [doctors, setDoctors] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedCards, setExpandedCards] = useState({});
 
   const tabs = [
     { id: 'Dashboard', label: 'Dashboard', icon: 'grid-outline' },
@@ -106,6 +107,58 @@ const AdminDashboard = () => {
     }
   };
 
+  const generateVerificationCode = () => {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+  };
+
+  const approveDoctorAndCreateVerification = async (doctor) => {
+    try {
+      const verificationCode = generateVerificationCode();
+      
+      // Create verification record
+      const verificationData = {
+        email: doctor.email,
+        name: doctor.name,
+        verificationCode: verificationCode,
+        doctorId: doctor.id,
+        createdAt: new Date().toISOString(),
+        status: 'active'
+      };
+
+      // Store in verification node
+      await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/verification.json',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(verificationData)
+        }
+      );
+
+      // Delete from doctors node
+      await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctor.id}.json`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+
+      // Update local state to remove the doctor
+      setDoctors(prev => prev.filter(d => d.id !== doctor.id));
+
+      Alert.alert(
+        'Doctor Approved!',
+        `Dr. ${doctor.name} has been approved successfully!\n\nVerification Code: ${verificationCode}\n\nThe doctor can now use this code with their email (${doctor.email}) to access the doctor verification portal.`,
+        [{ text: 'OK' }]
+      );
+
+    } catch (error) {
+      console.error('Error approving doctor:', error);
+      Alert.alert('Error', 'Failed to approve doctor. Please try again.');
+    }
+  };
+
   const logout = async () => {
     Alert.alert(
       'Logout',
@@ -124,53 +177,96 @@ const AdminDashboard = () => {
     );
   };
 
-  const renderDoctorCard = ({ item }) => (
-    <View style={styles.doctorCard}>
-      <View style={styles.doctorHeader}>
-        <View style={styles.doctorInfo}>
-          <Text style={styles.doctorName}>Dr. {item.name}</Text>
-          <Text style={styles.doctorSpecialty}>{item.specialty}</Text>
-          <View style={styles.doctorDetails}>
-            <Text style={styles.doctorDetail}>📧 {item.email}</Text>
-            <Text style={styles.doctorDetail}>📞 {item.phone}</Text>
-            <Text style={styles.doctorDetail}>🏥 {item.experience} years exp.</Text>
+  const renderDoctorCard = ({ item }) => {
+    const isExpanded = expandedCards[item.id] || false;
+
+    const toggleExpanded = () => {
+      setExpandedCards(prev => ({
+        ...prev,
+        [item.id]: !prev[item.id]
+      }));
+    };
+
+    return (
+      <View style={styles.doctorCard}>
+        <View style={styles.doctorHeader}>
+          <View style={styles.doctorInfo}>
+            <Text style={styles.doctorName}>Dr. {item.name}</Text>
+            <Text style={styles.doctorSpecialty}>{item.specialty}</Text>
+            
+            {/* Basic Details - Always Visible */}
+            <View style={styles.doctorDetails}>
+              <Text style={styles.doctorDetail}>📧 {item.email}</Text>
+              <Text style={styles.doctorDetail}>📞 {item.phone}</Text>
+              <Text style={styles.doctorDetail}>🏥 {item.experience} years exp.</Text>
+            </View>
+
+            {/* Extended Details - Show More */}
+            {isExpanded && (
+              <View style={styles.extendedDetails}>
+                <Text style={styles.detailSeparator}>• • •</Text>
+                <Text style={styles.doctorDetail}>🆔 License: {item.licenseNumber}</Text>
+                <Text style={styles.doctorDetail}>🎓 Qualification: {item.qualification}</Text>
+                <Text style={styles.doctorDetail}>🏥 Hospital: {item.hospitalAffiliation}</Text>
+                <Text style={styles.doctorDetail}>📍 Address: {item.address}</Text>
+                <Text style={styles.doctorDetail}>💰 Consultation Fee: ₹{item.consultationFee}</Text>
+                {item.registrationDate && (
+                  <Text style={styles.doctorDetail}>📅 Registered: {new Date(item.registrationDate).toLocaleDateString()}</Text>
+                )}
+              </View>
+            )}
+
+            {/* Show More/Less Button */}
+            <TouchableOpacity 
+              style={styles.showMoreBtn}
+              onPress={toggleExpanded}
+            >
+              <Text style={styles.showMoreText}>
+                {isExpanded ? 'Show Less' : 'Show More'}
+              </Text>
+              <Ionicons 
+                name={isExpanded ? 'chevron-up' : 'chevron-down'} 
+                size={16} 
+                color="#667eea" 
+              />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: item.verificationStatus === 'approved' ? '#dcfce7' : 
+                               item.verificationStatus === 'rejected' ? '#fef2f2' : '#fef3c7' }
+          ]}>
+            <Text style={[
+              styles.statusText,
+              { color: item.verificationStatus === 'approved' ? '#16a34a' : 
+                       item.verificationStatus === 'rejected' ? '#dc2626' : '#d97706' }
+            ]}>
+              {item.verificationStatus?.toUpperCase() || 'PENDING'}
+            </Text>
           </View>
         </View>
-        
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: item.verificationStatus === 'approved' ? '#dcfce7' : 
-                             item.verificationStatus === 'rejected' ? '#fef2f2' : '#fef3c7' }
-        ]}>
-          <Text style={[
-            styles.statusText,
-            { color: item.verificationStatus === 'approved' ? '#16a34a' : 
-                     item.verificationStatus === 'rejected' ? '#dc2626' : '#d97706' }
-          ]}>
-            {item.verificationStatus?.toUpperCase() || 'PENDING'}
-          </Text>
-        </View>
-      </View>
 
-      {item.verificationStatus === 'pending' && (
-        <View style={styles.doctorActions}>
-          <TouchableOpacity 
-            style={[styles.actionBtn, styles.approveBtn]}
-            onPress={() => updateDoctorStatus(item.id, 'approved')}
-          >
-            <Text style={styles.actionBtnText}>Approve</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionBtn, styles.rejectBtn]}
-            onPress={() => updateDoctorStatus(item.id, 'rejected')}
-          >
-            <Text style={styles.actionBtnText}>Reject</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+        {item.verificationStatus === 'pending' && (
+          <View style={styles.doctorActions}>
+            <TouchableOpacity 
+              style={[styles.actionBtn, styles.approveBtn]}
+              onPress={() => approveDoctorAndCreateVerification(item)}
+            >
+              <Text style={styles.actionBtnText}>Approve</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.actionBtn, styles.rejectBtn]}
+              onPress={() => updateDoctorStatus(item.id, 'rejected')}
+            >
+              <Text style={styles.actionBtnText}>Reject</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   const renderDashboard = () => (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -572,10 +668,42 @@ const styles = StyleSheet.create({
   },
   doctorDetails: {
     gap: 6,
+    marginBottom: 12,
   },
   doctorDetail: {
     fontSize: 13,
     color: '#718096',
+  },
+  extendedDetails: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  detailSeparator: {
+    fontSize: 12,
+    color: '#cbd5e0',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: 2,
+  },
+  showMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 12,
+    backgroundColor: '#f7fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  showMoreText: {
+    fontSize: 13,
+    color: '#667eea',
+    fontWeight: '600',
+    marginRight: 6,
   },
   statusBadge: {
     paddingHorizontal: 12,
