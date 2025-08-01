@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "425084232868",
+    "project_id": "fresh-a29f6",
+    "storage_bucket": "fresh-a29f6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:425084232868:android:2fc337efdbaab5f955b231",
+        "android_client_info": {
+          "package_name": "Balu.com"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "425084232868-rnf6jps8gqnmhggl355s71h0mmebfijj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "Balu.com",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "425084232868-6d6muuik0hddgq228i96d9aiav7e4jke.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDuc2MBzy2aWaQzVg13EKj659KblbcV-Vw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "425084232868-6d6muuik0hddgq228i96d9aiav7e4jke.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
