@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  SafeAreaView,
-  Platform,
-  Animated,
-  StatusBar,
-} from 'react-native';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useEffect, useRef } from 'react';
+import {
+  Animated,
+  Dimensions,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 let LinearGradient;
 try {
@@ -64,7 +64,10 @@ const LandingScreen = () => {
             <TouchableOpacity style={styles.headerButton}>
               <Ionicons name="notifications-outline" size={18} color="white" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerButton}>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={() => handleUserTypeSelect('/auth/admin-login')}
+            >
               <Ionicons name="menu-outline" size={18} color="white" />
             </TouchableOpacity>
           </View>

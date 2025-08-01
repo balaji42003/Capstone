@@ -11,6 +11,7 @@ export default function AuthLayout() {
       <Stack.Screen name="patient-login" />
       <Stack.Screen name="doctor-login" />
       <Stack.Screen name="pharmacy-login" />
+      <Stack.Screen name="admin-login" />
     </Stack>
   );
 }

@@ -182,7 +182,12 @@ const DoctorDashboard = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#4ECDC4" translucent={false} />
       {/* Professional Header */}
-      <View style={styles.header}>
+      <LinearGradient
+        colors={['#44A08D','#4ECDC4']}
+        style={styles.header}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
         <View style={styles.headerContent}>
           <View style={styles.doctorInfo}>
             <View style={styles.avatarContainer}>
@@ -218,7 +223,7 @@ const DoctorDashboard = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* Content */}
       <View style={styles.contentWrapper}>
