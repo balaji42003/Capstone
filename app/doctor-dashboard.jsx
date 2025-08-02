@@ -34,7 +34,8 @@ const DoctorDashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('Dashboard');
-  const [doctorName, setDoctorName] = useState('Dr. User');
+  const [doctorName, setDoctorName] = useState('');
+  const [doctorSpecialty, setDoctorSpecialty] = useState('');
   const [doctorPhoto, setDoctorPhoto] = useState(null);
 
   useEffect(() => {
@@ -45,17 +46,73 @@ const DoctorDashboard = () => {
   }, []);
 
   useEffect(() => {
-    // Load doctor session data
+    // Load doctor session data from Google and Firebase
     const loadDoctorData = async () => {
       try {
-        const userSession = await AsyncStorage.getItem('userSession');
-        if (userSession) {
-          const userData = JSON.parse(userSession);
-          setDoctorName(userData.name || 'Dr. User');
-          setDoctorPhoto(userData.photoURL || null);
+        const doctorSession = await AsyncStorage.getItem('doctorSession');
+        if (doctorSession) {
+          const sessionData = JSON.parse(doctorSession);
+          
+          // Set Google data first
+          setDoctorName(sessionData.name || '');
+          setDoctorPhoto(sessionData.photo || null);
+          
+          // Get doctor's unique ID from session
+          const doctorId = sessionData.doctorId;
+          const doctorEmail = sessionData.email;
+          
+          console.log('Session data:', { doctorId, doctorEmail });
+          
+          if (doctorId) {
+            // Fetch specific doctor data using the unique ID
+            const response = await fetch(
+              `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}.json`
+            );
+            const doctorData = await response.json();
+            
+            if (doctorData) {
+              console.log('Found doctor data by ID:', doctorData);
+              // Use the data from Firebase
+              setDoctorName(doctorData.name || sessionData.name || 'Doctor');
+              setDoctorSpecialty(doctorData.specialty || doctorData.specialization || 'Medical Professional');
+              console.log('Doctor data loaded:', {
+                id: doctorId,
+                name: doctorData.name,
+                specialty: doctorData.specialty,
+                specialization: doctorData.specialization,
+                email: doctorData.email
+              });
+            } else {
+              console.log('No doctor data found for ID:', doctorId);
+              setDoctorSpecialty('Medical Professional');
+            }
+          } else {
+            console.log('No doctor ID in session, falling back to email search');
+            // Fallback to old method if no doctorId in session
+            if (doctorEmail) {
+              const response = await fetch(
+                'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
+              );
+              const doctorsData = await response.json();
+              
+              if (doctorsData) {
+                const doctorRecord = Object.values(doctorsData).find(
+                  doctor => doctor.email === doctorEmail
+                );
+                
+                if (doctorRecord) {
+                  setDoctorName(doctorRecord.name || sessionData.name || 'Doctor');
+                  setDoctorSpecialty(doctorRecord.specialty || doctorRecord.specialization || 'Medical Professional');
+                }
+              }
+            }
+          }
         }
       } catch (error) {
         console.error('Error loading doctor data:', error);
+        // Set fallback values
+        setDoctorName('Doctor');
+        setDoctorSpecialty('Medical Professional');
       }
     };
 
@@ -181,13 +238,8 @@ const DoctorDashboard = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#4ECDC4" translucent={false} />
-      {/* Professional Header */}
-      <LinearGradient
-        colors={['#44A08D','#4ECDC4']}
-        style={styles.header}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
+      {/* Professional Header - Solid Green */}
+      <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.doctorInfo}>
             <View style={styles.avatarContainer}>
@@ -198,17 +250,18 @@ const DoctorDashboard = () => {
                   resizeMode="cover"
                 />
               ) : (
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.1)']}
-                  style={styles.avatarGradient}
-                >
+                <View style={styles.avatarFallback}>
                   <FontAwesome5 name="user-md" size={20} color="white" />
-                </LinearGradient>
+                </View>
               )}
             </View>
             <View style={styles.doctorDetails}>
-              <Text style={styles.doctorName}>{doctorName}</Text>
-              <Text style={styles.specialization}>Medical Professional</Text>
+              <Text style={styles.doctorName}>
+                {doctorName || 'Doctor'}
+              </Text>
+              <Text style={styles.specialization}>
+                {doctorSpecialty || 'Medical Professional'}
+              </Text>
             </View>
           </View>
           <View style={styles.headerActions}>
@@ -223,7 +276,7 @@ const DoctorDashboard = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </LinearGradient>
+      </View>
 
       {/* Content */}
       <View style={styles.contentWrapper}>
@@ -351,8 +404,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#4ECDC4', // Header color for status bar area
   },
   
-  // Compact Header
+  // Updated Header - Solid Green
   header: {
+    backgroundColor: '#4ECDC4', // Solid green color instead of gradient
     paddingTop: Platform.OS === 'ios' ? 50 : 40,
     paddingBottom: 20,
     paddingHorizontal: 20,
@@ -388,10 +442,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.3)',
   },
-  avatarGradient: {
+  avatarFallback: {
     width: 48,
     height: 48,
     borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,

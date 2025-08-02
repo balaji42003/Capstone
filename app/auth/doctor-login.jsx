@@ -30,6 +30,7 @@ try {
 const DoctorRegistrationScreen = () => {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [loginMode, setLoginMode] = useState('register'); // 'register' or 'login'
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -43,10 +44,143 @@ const DoctorRegistrationScreen = () => {
     consultationFee: ''
   });
 
-  // Remove Google Sign-In configuration
+  // Configure Google Sign-In
   useEffect(() => {
-    // No Google Sign-In needed for registration
+    const configureGoogleSignIn = async () => {
+      try {
+        const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
+        GoogleSignin.configure({
+          webClientId: '425084232868-6d6muuik0hddgq228i96d9aiav7e4jke.apps.googleusercontent.com',
+          offlineAccess: false,
+        });
+        console.log('Google Sign-In configured successfully');
+      } catch (error) {
+        console.error('Google Sign-In configuration error:', error);
+      }
+    };
+    
+    configureGoogleSignIn();
   }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      setIsLoading(true);
+      
+      const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
+      
+      // Check Google Play Services
+      const hasPlayServices = await GoogleSignin.hasPlayServices({
+        showPlayServicesUpdateDialog: true,
+      });
+      
+      if (!hasPlayServices) {
+        Alert.alert('Error', 'Google Play Services is not available or needs updating.');
+        return;
+      }
+
+      // Sign out any previous user
+      try {
+        await GoogleSignin.signOut();
+      } catch (signOutError) {
+        console.log('No previous user to sign out');
+      }
+
+      // Attempt Google Sign-In
+      console.log('Attempting Google Sign-In...');
+      const userInfo = await GoogleSignin.signIn();
+      console.log('Google Sign-In successful:', userInfo);
+
+      // Check if userInfo is valid
+      if (!userInfo || !userInfo.data || !userInfo.data.user) {
+        throw new Error('Google Sign-In did not return user information.');
+      }
+
+      const { user } = userInfo.data;
+
+      // Check if the doctor exists in the approved doctors database
+      const doctorsResponse = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
+      );
+      const doctorsData = await doctorsResponse.json();
+      
+      let approvedDoctor = null;
+      let doctorId = null;
+      if (doctorsData) {
+        // Find doctor and capture both the data and the ID
+        for (const [key, doctor] of Object.entries(doctorsData)) {
+          if (doctor.email?.toLowerCase() === user.email?.toLowerCase() && 
+              doctor.verificationStatus === 'approved') {
+            approvedDoctor = doctor;
+            doctorId = key; // This is the unique doctor ID like "doc_1754154176785"
+            break;
+          }
+        }
+      }
+
+      if (!approvedDoctor) {
+        // Doctor not found in approved list, prompt for registration
+        Alert.alert(
+          'Registration Required',
+          `Dr. ${user.name}, your email (${user.email}) is not found in our approved doctors database. Please register first and wait for admin approval.`,
+          [
+            { 
+              text: 'Register Now', 
+              onPress: () => {
+                setLoginMode('register');
+                setFormData({
+                  ...formData,
+                  name: user.name || '',
+                  email: user.email || ''
+                });
+              }
+            },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+        return;
+      }
+
+      // Store doctor session data with unique doctor ID
+      const AsyncStorage = await import('@react-native-async-storage/async-storage');
+      const doctorData = {
+        email: user.email,
+        name: user.name,
+        photo: user.photo,
+        id: user.id,
+        role: 'doctor',
+        verified: true,
+        doctorId: doctorId, // Store the unique doctor ID from Firebase
+        doctorDetails: approvedDoctor,
+        loginTime: new Date().toISOString()
+      };
+
+      await AsyncStorage.default.setItem('doctorSession', JSON.stringify(doctorData));
+      console.log('Doctor session stored with ID:', doctorId);
+
+      Alert.alert(
+        'Login Successful!',
+        `Welcome back Dr. ${user.name}! You have been logged in successfully.`,
+        [
+          { text: 'Continue', onPress: () => router.replace('/doctor-dashboard') }
+        ]
+      );
+
+    } catch (error) {
+      console.error('Google login error:', error);
+      
+      if (error.code === 'statusCodes.SIGN_IN_CANCELLED') {
+        Alert.alert('Sign-In Cancelled', 'Google Sign-In was cancelled.');
+      } else if (error.code === 'statusCodes.IN_PROGRESS') {
+        Alert.alert('Sign-In In Progress', 'Google Sign-In is already in progress.');
+      } else if (error.code === 'statusCodes.PLAY_SERVICES_NOT_AVAILABLE') {
+        Alert.alert('Play Services Error', 'Google Play Services is not available or needs updating.');
+      } else {
+        Alert.alert('Login Failed', error.message || 'Login failed. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const submitRegistrationRequest = async () => {
     try {
@@ -130,15 +264,86 @@ const DoctorRegistrationScreen = () => {
             <View style={styles.doctorIconContainer}>
               <Ionicons name="medical" size={40} color="white" />
             </View>
-            <Text style={styles.headerTitle}>Doctor Registration</Text>
+            <Text style={styles.headerTitle}>
+              {loginMode === 'register' ? 'Doctor Registration' : 'Doctor Login'}
+            </Text>
             <Text style={styles.headerSubtitle}>
-              Join our medical network
+              {loginMode === 'register' ? 'Join our medical network' : 'Welcome back, Doctor'}
             </Text>
           </View>
         </LinearGradient>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.formContainer}>
+            {/* Mode Toggle */}
+            <View style={styles.toggleContainer}>
+              <View style={styles.toggleWrapper}>
+                <TouchableOpacity
+                  style={[styles.toggleButton, loginMode === 'login' && styles.activeToggle]}
+                  onPress={() => setLoginMode('login')}
+                >
+                  <Ionicons 
+                    name="log-in-outline" 
+                    size={16} 
+                    color={loginMode === 'login' ? 'white' : '#4ECDC4'} 
+                  />
+                  <Text style={[styles.toggleText, loginMode === 'login' && styles.activeToggleText]}>
+                    Existing Doctor
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.toggleButton, loginMode === 'register' && styles.activeToggle]}
+                  onPress={() => setLoginMode('register')}
+                >
+                  <Ionicons 
+                    name="person-add-outline" 
+                    size={16} 
+                    color={loginMode === 'register' ? 'white' : '#4ECDC4'} 
+                  />
+                  <Text style={[styles.toggleText, loginMode === 'register' && styles.activeToggleText]}>
+                    New Registration
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {loginMode === 'login' ? (
+              // Login Mode - Google Sign-In
+              <View style={styles.loginContainer}>
+                <View style={styles.professionalBadge}>
+                  <Ionicons name="shield-checkmark" size={20} color="#4ECDC4" />
+                  <Text style={styles.badgeText}>Verified Doctor Login Portal</Text>
+                </View>
+
+                <Text style={styles.loginDescription}>
+                  Sign in with your Google account to access your doctor dashboard. 
+                  Your email must be registered and approved by our admin team.
+                </Text>
+
+                <TouchableOpacity 
+                  style={styles.googleButton}
+                  onPress={handleGoogleLogin}
+                  disabled={isLoading}
+                >
+                  <View style={styles.googleButtonContent}>
+                    <Ionicons name="logo-google" size={20} color="#4285F4" />
+                    <Text style={styles.googleButtonText}>
+                      {isLoading ? 'Signing in...' : 'Sign in with Google'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                <View style={styles.loginHelpContainer}>
+                  <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
+                  <Text style={styles.loginHelpText}>
+                    Not approved yet? Contact admin or register below if you're a new doctor.
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              // Registration Mode - Form
+              <View>
             {/* Professional Badge */}
             <View style={styles.professionalBadge}>
               <Ionicons name="shield-checkmark" size={20} color="#4ECDC4" />
@@ -343,6 +548,8 @@ const DoctorRegistrationScreen = () => {
                 </View>
               </View>
             </View>
+              </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -401,6 +608,75 @@ const styles = StyleSheet.create({
   formContainer: {
     marginTop: 20,
     paddingBottom: 40,
+  },
+  toggleContainer: {
+    marginBottom: 25,
+  },
+  toggleWrapper: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 6,
+  },
+  activeToggle: {
+    backgroundColor: '#4ECDC4',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#4ECDC4',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4ECDC4',
+  },
+  activeToggleText: {
+    color: 'white',
+  },
+  loginContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loginDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginVertical: 20,
+    lineHeight: 20,
+    paddingHorizontal: 10,
+  },
+  loginHelpContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 20,
+    maxWidth: '100%',
+  },
+  loginHelpText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 16,
   },
   professionalBadge: {
     flexDirection: 'row',
@@ -563,12 +839,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    paddingVertical: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    minWidth: 250,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   googleButtonContent: {
     flexDirection: 'row',

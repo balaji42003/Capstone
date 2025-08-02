@@ -3,18 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -24,6 +24,7 @@ const AdminDashboard = () => {
   const [adminName, setAdminName] = useState('');
   const [adminPhoto, setAdminPhoto] = useState('');
   const [doctors, setDoctors] = useState([]);
+  const [verifiedDoctors, setVerifiedDoctors] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedCards, setExpandedCards] = useState({});
@@ -38,6 +39,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     loadAdminData();
     loadDoctors();
+    loadVerifiedDoctors();
   }, []);
 
   const loadAdminData = async () => {
@@ -75,9 +77,29 @@ const AdminDashboard = () => {
     }
   };
 
+  const loadVerifiedDoctors = async () => {
+    try {
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/verification.json'
+      );
+      const data = await response.json();
+      
+      if (data) {
+        const verifiedDoctorsList = Object.keys(data).map(key => ({
+          id: key,
+          ...data[key]
+        }));
+        setVerifiedDoctors(verifiedDoctorsList);
+      }
+    } catch (error) {
+      console.error('Error loading verified doctors:', error);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadDoctors();
+    await loadVerifiedDoctors();
     setRefreshing(false);
   };
 
@@ -111,22 +133,87 @@ const AdminDashboard = () => {
     return Math.floor(1000 + Math.random() * 9000).toString();
   };
 
+  const sendVerificationEmail = async (doctorEmail, doctorName, verificationCode) => {
+    const emailData = {
+      name: doctorName,
+      email: doctorEmail,
+      verification_code: verificationCode
+    };
+
+    try {
+      console.log('Sending verification email with data:', emailData);
+
+      const response = await fetch('http://10.3.5.210:5008/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        console.log('Verification email sent successfully to:', doctorEmail);
+        return true;
+      } else {
+        console.error('Flask email error:', result.error);
+        return false;
+      }
+    } catch (error) {
+      console.error('Failed to send verification email:', error);
+      console.error('Error details:', error.message);
+      return false;
+    }
+  };
+
   const approveDoctorAndCreateVerification = async (doctor) => {
     try {
+      // Show loading state
+      Alert.alert('Processing', 'Approving doctor and sending verification email...', 
+        [], { cancelable: false });
+
       const verificationCode = generateVerificationCode();
       
-      // Create verification record
+      // 1. Update doctor status to 'approved' in doctors node (preserve all data)
+      const updatedDoctorData = {
+        ...doctor,
+        verificationStatus: 'approved',
+        approvedAt: new Date().toISOString(),
+        verificationCode: verificationCode
+      };
+
+      const doctorUpdateResponse = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctor.id}.json`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedDoctorData)
+        }
+      );
+
+      if (!doctorUpdateResponse.ok) {
+        throw new Error('Failed to update doctor status');
+      }
+
+      // 2. Create verification record for email/verification purposes
       const verificationData = {
         email: doctor.email,
         name: doctor.name,
         verificationCode: verificationCode,
         doctorId: doctor.id,
         createdAt: new Date().toISOString(),
-        status: 'active'
+        status: 'approved',
+        emailSent: false,
+        emailSentAt: null,
+        // Include essential doctor info for verification reference
+        specialty: doctor.specialty,
+        phone: doctor.phone,
+        licenseNumber: doctor.licenseNumber
       };
 
       // Store in verification node
-      await fetch(
+      const verificationResponse = await fetch(
         'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/verification.json',
         {
           method: 'POST',
@@ -135,27 +222,105 @@ const AdminDashboard = () => {
         }
       );
 
-      // Delete from doctors node
+      if (!verificationResponse.ok) {
+        throw new Error('Failed to create verification record');
+      }
+
+      // 3. Send verification email
+      const emailSent = await sendVerificationEmail(
+        doctor.email, 
+        doctor.name, 
+        verificationCode
+      );
+
+      // 4. Update verification record with email status
+      const verificationResult = await verificationResponse.json();
+      const verificationId = verificationResult.name;
+      
       await fetch(
-        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctor.id}.json`,
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/verification/${verificationId}.json`,
         {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            emailSent: emailSent, 
+            emailSentAt: emailSent ? new Date().toISOString() : null 
+          })
         }
       );
 
-      // Update local state to remove the doctor
-      setDoctors(prev => prev.filter(d => d.id !== doctor.id));
+      // 5. Update local state to reflect the approval
+      setDoctors(prev => 
+        prev.map(d => 
+          d.id === doctor.id 
+            ? { ...d, verificationStatus: 'approved', verificationCode: verificationCode }
+            : d
+        )
+      );
 
+      // 6. Reload verified doctors to update the verification list
+      await loadVerifiedDoctors();
+
+      // Show success message
       Alert.alert(
-        'Doctor Approved!',
-        `Dr. ${doctor.name} has been approved successfully!\n\nVerification Code: ${verificationCode}\n\nThe doctor can now use this code with their email (${doctor.email}) to access the doctor verification portal.`,
+        'Doctor Approved Successfully!',
+        `Dr. ${doctor.name} has been approved and notified!\n\n` +
+        `✅ Verification Code: ${verificationCode}\n` +
+        `📧 Email Status: ${emailSent ? 'Sent Successfully' : 'Failed to Send'}\n` +
+        `📮 Sent to: ${doctor.email}\n\n` +
+        `${emailSent ? 
+          'The doctor will receive an email with their verification code and can now access the doctor verification portal.' : 
+          'Please manually share the verification code with the doctor as the email failed to send.'
+        }\n\n` +
+        `💾 Doctor data has been preserved in the doctors database with approved status.`,
         [{ text: 'OK' }]
       );
 
     } catch (error) {
       console.error('Error approving doctor:', error);
-      Alert.alert('Error', 'Failed to approve doctor. Please try again.');
+      Alert.alert(
+        'Approval Failed', 
+        `Failed to approve Dr. ${doctor.name}. Please try again.\n\nError: ${error.message}`,
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  // Test Email Function
+  const testEmailFunctionality = async () => {
+    const emailData = {
+      name: 'Admin Test',
+      email: '99220042003@klu.ac.in',
+      verification_code: 'TEST'
+    };
+
+    try {
+      console.log('Testing email functionality...');
+      console.log('Sending test email with data:', emailData);
+
+      const response = await fetch('http://10.3.5.210:5008/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        console.log('Test email sent successfully!');
+        Alert.alert('Success!', 'Test email sent successfully to 99220042003@klu.ac.in!');
+        return true;
+      } else {
+        console.error('Flask email error:', result.error);
+        Alert.alert('Test Failed', `Email failed: ${result.error || 'Unknown error'}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('Fetch error:', error);
+      Alert.alert('Test Failed', 'Something went wrong while sending the email. Make sure Flask server is running.');
+      return false;
     }
   };
 
@@ -234,20 +399,20 @@ const AdminDashboard = () => {
           
           <View style={[
             styles.statusBadge,
-            { backgroundColor: item.verificationStatus === 'approved' ? '#dcfce7' : 
-                               item.verificationStatus === 'rejected' ? '#fef2f2' : '#fef3c7' }
+            { backgroundColor: (item.verificationStatus || item.status) === 'approved' ? '#dcfce7' : 
+                               (item.verificationStatus || item.status) === 'rejected' ? '#fef2f2' : '#fef3c7' }
           ]}>
             <Text style={[
               styles.statusText,
-              { color: item.verificationStatus === 'approved' ? '#16a34a' : 
-                       item.verificationStatus === 'rejected' ? '#dc2626' : '#d97706' }
+              { color: (item.verificationStatus || item.status) === 'approved' ? '#16a34a' : 
+                       (item.verificationStatus || item.status) === 'rejected' ? '#dc2626' : '#d97706' }
             ]}>
-              {item.verificationStatus?.toUpperCase() || 'PENDING'}
+              {(item.verificationStatus || item.status)?.toUpperCase() || 'PENDING'}
             </Text>
           </View>
         </View>
 
-        {item.verificationStatus === 'pending' && (
+        {(item.verificationStatus || item.status) === 'pending' && (
           <View style={styles.doctorActions}>
             <TouchableOpacity 
               style={[styles.actionBtn, styles.approveBtn]}
@@ -276,22 +441,22 @@ const AdminDashboard = () => {
         <View style={styles.statsGrid}>
           {[
             { 
-              title: 'Total Doctors', 
-              value: doctors.length.toString(), 
+              title: 'Total Approved', 
+              value: verifiedDoctors.filter(d => d.status === 'approved').length.toString(), 
               icon: 'people',
               color: '#3b82f6'
             },
             { 
-              title: 'Approved', 
-              value: doctors.filter(d => d.verificationStatus === 'approved').length.toString(), 
-              icon: 'checkmark-circle',
-              color: '#10b981'
-            },
-            { 
-              title: 'Pending', 
-              value: doctors.filter(d => d.verificationStatus === 'pending').length.toString(), 
+              title: 'Pending Requests', 
+              value: doctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending').length.toString(), 
               icon: 'time',
               color: '#f59e0b'
+            },
+            { 
+              title: 'Recently Approved', 
+              value: verifiedDoctors.filter(d => d.status === 'approved').length.toString(), 
+              icon: 'checkmark-circle',
+              color: '#10b981'
             },
             { 
               title: 'Rejected', 
@@ -316,10 +481,10 @@ const AdminDashboard = () => {
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
           {[
-            { title: 'Manage Doctors', icon: 'people', color: '#8b5cf6', action: () => setActiveTab('Doctors') },
+            { title: 'Pending Requests', icon: 'people', color: '#8b5cf6', action: () => setActiveTab('Doctors') },
             { title: 'View Analytics', icon: 'analytics', color: '#06b6d4', action: () => setActiveTab('Analytics') },
             { title: 'System Settings', icon: 'settings', color: '#84cc16', action: () => setActiveTab('Settings') },
-            { title: 'Export Data', icon: 'download', color: '#f97316', action: () => Alert.alert('Coming Soon') },
+            { title: 'Test Email', icon: 'mail', color: '#f97316', action: testEmailFunctionality },
           ].map((action, index) => (
             <TouchableOpacity key={index} style={styles.actionCard} onPress={action.action}>
               <Ionicons name={action.icon} size={24} color={action.color} />
@@ -329,15 +494,15 @@ const AdminDashboard = () => {
         </View>
       </View>
 
-      {/* Recent Doctors */}
+      {/* Recent Doctor Requests */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Registrations</Text>
+          <Text style={styles.sectionTitle}>Recent Requests</Text>
           <TouchableOpacity onPress={() => setActiveTab('Doctors')}>
             <Text style={styles.viewAll}>View All</Text>
           </TouchableOpacity>
         </View>
-        {doctors.slice(0, 3).map((doctor) => (
+        {doctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending').slice(0, 3).map((doctor) => (
           <View key={doctor.id}>
             {renderDoctorCard({ item: doctor })}
           </View>
@@ -349,7 +514,7 @@ const AdminDashboard = () => {
   const renderDoctors = () => (
     <View style={styles.content}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Doctor Management</Text>
+        <Text style={styles.sectionTitle}>Doctor Requests Management</Text>
         <TouchableOpacity onPress={loadDoctors}>
           <Ionicons name="refresh" size={20} color="#374151" />
         </TouchableOpacity>
@@ -357,15 +522,22 @@ const AdminDashboard = () => {
       
       {loadingDoctors ? (
         <View style={styles.loading}>
-          <Text style={styles.loadingText}>Loading doctors...</Text>
+          <Text style={styles.loadingText}>Loading doctor requests...</Text>
         </View>
       ) : (
         <FlatList
-          data={doctors}
+          data={doctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending')}
           renderItem={renderDoctorCard}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color="#9ca3af" />
+              <Text style={styles.emptyTitle}>No Pending Requests</Text>
+              <Text style={styles.emptyText}>All doctor registration requests have been processed</Text>
+            </View>
+          )}
         />
       )}
     </View>
@@ -808,6 +980,26 @@ const styles = StyleSheet.create({
   activeNavText: {
     color: '#667eea',
     fontWeight: '700',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2d3748',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#718096',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

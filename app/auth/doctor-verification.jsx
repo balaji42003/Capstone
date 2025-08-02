@@ -94,7 +94,7 @@ const DoctorVerificationScreen = () => {
       const verificationRecord = Object.values(verificationData).find(record => 
         record.email.toLowerCase() === formData.email.toLowerCase() && 
         record.verificationCode === formData.verificationCode &&
-        record.status === 'active'
+        record.status === 'approved'
       );
 
       if (!verificationRecord) {
