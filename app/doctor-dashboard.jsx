@@ -1,10 +1,12 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   Image,
+  Modal,
   Platform,
   RefreshControl,
   SafeAreaView,
@@ -37,6 +39,17 @@ const DoctorDashboard = () => {
   const [doctorName, setDoctorName] = useState('');
   const [doctorSpecialty, setDoctorSpecialty] = useState('');
   const [doctorPhoto, setDoctorPhoto] = useState(null);
+  const [doctorId, setDoctorId] = useState(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedDay, setSelectedDay] = useState('');
+  const [selectedStartTime, setSelectedStartTime] = useState('09:00');
+  const [selectedEndTime, setSelectedEndTime] = useState('17:00');
+  const [doctorTimings, setDoctorTimings] = useState({});
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [appointments, setAppointments] = useState([]);
+  const [patients, setPatients] = useState([]);
+  const [appointmentStats, setAppointmentStats] = useState({ total: 0, confirmed: 0, pending: 0 });
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -75,12 +88,15 @@ const DoctorDashboard = () => {
               // Use the data from Firebase
               setDoctorName(doctorData.name || sessionData.name || 'Doctor');
               setDoctorSpecialty(doctorData.specialty || doctorData.specialization || 'Medical Professional');
+              setDoctorId(doctorId); // Store doctor ID for schedule updates
+              setDoctorTimings(doctorData.timings || {}); // Load existing timings
               console.log('Doctor data loaded:', {
                 id: doctorId,
                 name: doctorData.name,
                 specialty: doctorData.specialty,
                 specialization: doctorData.specialization,
-                email: doctorData.email
+                email: doctorData.email,
+                timings: doctorData.timings
               });
             } else {
               console.log('No doctor data found for ID:', doctorId);
@@ -119,6 +135,13 @@ const DoctorDashboard = () => {
     loadDoctorData();
   }, []);
 
+  // Load appointments and patients when doctorId is available
+  useEffect(() => {
+    if (doctorId) {
+      loadAppointmentsData();
+    }
+  }, [doctorId, loadAppointmentsData]);
+
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     setTimeout(() => {
@@ -135,6 +158,198 @@ const DoctorDashboard = () => {
     }
   };
 
+  // Schedule Management Functions
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  
+  const timeSlots = [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+    '18:00', '18:30', '19:00', '19:30', '20:00'
+  ];
+
+  const saveSchedule = async () => {
+    if (!selectedDay || !doctorId) {
+      Alert.alert('Error', 'Please select a day and ensure you are logged in');
+      return;
+    }
+
+    try {
+      const timing = {
+        day: selectedDay,
+        startTime: selectedStartTime,
+        endTime: selectedEndTime,
+        isAvailable: true,
+        createdAt: new Date().toISOString()
+      };
+
+      // Update the local state
+      const updatedTimings = {
+        ...doctorTimings,
+        [selectedDay]: timing
+      };
+      setDoctorTimings(updatedTimings);
+
+      // Save to Firebase
+      const response = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}/timings.json`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedTimings)
+        }
+      );
+
+      if (response.ok) {
+        Alert.alert('Success', `Schedule for ${selectedDay} has been ${editingSchedule ? 'updated' : 'saved'} successfully!`);
+        setShowScheduleModal(false);
+        resetScheduleForm();
+      } else {
+        throw new Error('Failed to save schedule');
+      }
+    } catch (error) {
+      console.error('Error saving schedule:', error);
+      Alert.alert('Error', 'Failed to save schedule. Please try again.');
+    }
+  };
+
+  const resetScheduleForm = () => {
+    setSelectedDay('');
+    setSelectedStartTime('09:00');
+    setSelectedEndTime('17:00');
+    setEditingSchedule(null);
+    setShowAddForm(false);
+  };
+
+  const editSchedule = (day, timing) => {
+    setSelectedDay(day);
+    setSelectedStartTime(timing.startTime);
+    setSelectedEndTime(timing.endTime);
+    setEditingSchedule(day);
+    setShowAddForm(true);
+  };
+
+  const deleteSchedule = async (day) => {
+    try {
+      const updatedTimings = { ...doctorTimings };
+      delete updatedTimings[day];
+      setDoctorTimings(updatedTimings);
+
+      // Save to Firebase
+      const response = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}/timings.json`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedTimings)
+        }
+      );
+
+      if (response.ok) {
+        Alert.alert('Success', `Schedule for ${day} has been deleted successfully!`);
+      } else {
+        throw new Error('Failed to delete schedule');
+      }
+    } catch (error) {
+      console.error('Error deleting schedule:', error);
+      Alert.alert('Error', 'Failed to delete schedule. Please try again.');
+    }
+  };
+
+  const confirmDelete = (day) => {
+    Alert.alert(
+      'Delete Schedule',
+      `Are you sure you want to delete the schedule for ${day}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteSchedule(day) }
+      ]
+    );
+  };
+
+  const loadAppointmentsData = useCallback(async () => {
+    if (!doctorId) return;
+    
+    try {
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments.json'
+      );
+      const data = await response.json();
+      
+      if (data) {
+        // Filter appointments for this doctor
+        const doctorAppointments = Object.entries(data)
+          .filter(([key, appointment]) => appointment.doctorId === doctorId)
+          .map(([key, appointment]) => ({ id: key, ...appointment }));
+        
+        setAppointments(doctorAppointments);
+        
+        // Calculate stats
+        const stats = {
+          total: doctorAppointments.length,
+          confirmed: doctorAppointments.filter(app => app.status === 'confirmed').length,
+          pending: doctorAppointments.filter(app => app.status === 'pending').length
+        };
+        setAppointmentStats(stats);
+        
+        // Extract unique patients
+        const uniquePatients = doctorAppointments.reduce((acc, appointment) => {
+          const patientKey = appointment.patientEmail || appointment.userEmail;
+          if (!acc.find(p => p.email === patientKey)) {
+            acc.push({
+              email: patientKey,
+              name: appointment.patientName || appointment.userName,
+              appointments: doctorAppointments.filter(a => 
+                (a.patientEmail || a.userEmail) === patientKey
+              ).length
+            });
+          }
+          return acc;
+        }, []);
+        
+        setPatients(uniquePatients);
+      }
+    } catch (error) {
+      console.error('Error loading appointments data:', error);
+    }
+  }, [doctorId]);
+
+  const handleAppointmentAction = async (appointmentId, action) => {
+    try {
+      const response = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments/${appointmentId}.json`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            status: action,
+            updatedAt: new Date().toISOString(),
+            updatedBy: doctorId
+          })
+        }
+      );
+
+      if (response.ok) {
+        Alert.alert('Success', `Appointment ${action} successfully!`);
+        // Reload appointments data
+        loadAppointmentsData();
+      } else {
+        throw new Error(`Failed to ${action} appointment`);
+      }
+    } catch (error) {
+      console.error(`Error ${action} appointment:`, error);
+      Alert.alert('Error', `Failed to ${action} appointment. Please try again.`);
+    }
+  };
+
+  const handleQuickActionPress = (action) => {
+    if (action.action) {
+      action.action();
+    } else if (action.route) {
+      router.push(action.route);
+    }
+  };
+
   // Circular Quick Actions
   const quickActions = [
     { 
@@ -143,31 +358,23 @@ const DoctorDashboard = () => {
       icon: 'people',
       iconType: 'ionicons',
       colors: ['#4ECDC4', '#44A08D'],
-      route: '/doctor/patients'
+      action: () => setActiveTab('Patients')
     },
     { 
       id: 2, 
-      title: 'Calendar',
+      title: 'Appointments',
       icon: 'calendar',
       iconType: 'ionicons',
       colors: ['#667eea', '#764ba2'],
-      route: '/doctor/appointments'
+      action: () => setActiveTab('Appointments')
     },
     { 
       id: 3, 
-      title: 'Video Call',
-      icon: 'videocam',
-      iconType: 'ionicons',
-      colors: ['#f093fb', '#f5576c'],
-      route: '/video-call'
-    },
-    { 
-      id: 4, 
-      title: 'Records',
-      icon: 'document-text',
+      title: 'Schedule',
+      icon: 'time',
       iconType: 'ionicons',
       colors: ['#4facfe', '#00f2fe'],
-      route: '/doctor/records'
+      action: () => setShowScheduleModal(true)
     }
   ];
 
@@ -278,6 +485,51 @@ const DoctorDashboard = () => {
         </View>
       </View>
 
+      {/* Bottom Navigation Tabs */}
+      <View style={styles.bottomNavigation}>
+        <TouchableOpacity 
+          style={[styles.navTab, activeTab === 'Dashboard' && styles.activeNavTab]}
+          onPress={() => setActiveTab('Dashboard')}
+        >
+          <Ionicons 
+            name={activeTab === 'Dashboard' ? 'home' : 'home-outline'} 
+            size={20} 
+            color={activeTab === 'Dashboard' ? '#4ECDC4' : '#666'} 
+          />
+          <Text style={[styles.navTabText, activeTab === 'Dashboard' && styles.activeNavTabText]}>
+            Dashboard
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.navTab, activeTab === 'Appointments' && styles.activeNavTab]}
+          onPress={() => setActiveTab('Appointments')}
+        >
+          <Ionicons 
+            name={activeTab === 'Appointments' ? 'calendar' : 'calendar-outline'} 
+            size={20} 
+            color={activeTab === 'Appointments' ? '#4ECDC4' : '#666'} 
+          />
+          <Text style={[styles.navTabText, activeTab === 'Appointments' && styles.activeNavTabText]}>
+            Appointments
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.navTab, activeTab === 'Patients' && styles.activeNavTab]}
+          onPress={() => setActiveTab('Patients')}
+        >
+          <Ionicons 
+            name={activeTab === 'Patients' ? 'people' : 'people-outline'} 
+            size={20} 
+            color={activeTab === 'Patients' ? '#4ECDC4' : '#666'} 
+          />
+          <Text style={[styles.navTabText, activeTab === 'Patients' && styles.activeNavTabText]}>
+            Patients
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Content */}
       <View style={styles.contentWrapper}>
         <ScrollView 
@@ -288,85 +540,253 @@ const DoctorDashboard = () => {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-        {/* Circular Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.circularActionsGrid}>
-            {quickActions.map((action) => (
-              <TouchableOpacity key={action.id} style={styles.circularActionContainer}>
-                <LinearGradient
-                  colors={action.colors}
-                  style={styles.circularAction}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons name={action.icon} size={24} color="white" />
-                </LinearGradient>
-                <Text style={styles.circularActionText}>{action.title}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Compact Statistics Grid */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Today's Overview</Text>
-          <View style={styles.compactStatsGrid}>
-            {todayStats.map((stat, index) => (
-              <View key={index} style={styles.compactStatCard}>
-                <View style={[styles.statIcon, { backgroundColor: `${stat.color}20` }]}>
-                  <Ionicons name={stat.icon} size={16} color={stat.color} />
-                </View>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
+        {activeTab === 'Dashboard' && (
+          <>
+            {/* Circular Quick Actions */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Quick Actions</Text>
+              <View style={styles.circularActionsGrid}>
+                {quickActions.map((action) => (
+                  <TouchableOpacity 
+                    key={action.id} 
+                    style={styles.circularActionContainer}
+                    onPress={() => handleQuickActionPress(action)}
+                  >
+                    <LinearGradient
+                      colors={action.colors}
+                      style={styles.circularAction}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <Ionicons name={action.icon} size={24} color="white" />
+                    </LinearGradient>
+                    <Text style={styles.circularActionText}>{action.title}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-            ))}
-          </View>
-        </View>
+            </View>
 
-        {/* Upcoming Appointments */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.appointmentsContainer}>
-            {upcomingAppointments.map((appointment) => (
-              <TouchableOpacity key={appointment.id} style={styles.appointmentCard}>
-                <View style={styles.appointmentInfo}>
-                  <View style={styles.patientAvatar}>
-                    <Text style={styles.avatarText}>{appointment.avatar}</Text>
+            {/* Compact Statistics Grid */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Today's Overview</Text>
+              <View style={styles.compactStatsGrid}>
+                {todayStats.map((stat, index) => (
+                  <View key={index} style={styles.compactStatCard}>
+                    <View style={[styles.statIcon, { backgroundColor: `${stat.color}20` }]}>
+                      <Ionicons name={stat.icon} size={16} color={stat.color} />
+                    </View>
+                    <Text style={styles.statValue}>{stat.value}</Text>
+                    <Text style={styles.statLabel}>{stat.label}</Text>
                   </View>
-                  <View style={styles.appointmentDetails}>
-                    <Text style={styles.patientName}>{appointment.name}</Text>
-                    <Text style={styles.appointmentType}>{appointment.type}</Text>
-                  </View>
-                </View>
-                <View style={styles.appointmentTime}>
-                  <Text style={styles.timeText}>{appointment.time}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+                ))}
+              </View>
+            </View>
 
-        {/* Medical Tools Grid */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Medical Tools</Text>
-          <View style={styles.toolsGrid}>
-            {menuItems.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.toolCard}>
-                <View style={[styles.toolIcon, { backgroundColor: `${item.color}20` }]}>
-                  <Ionicons name={item.icon} size={20} color={item.color} />
-                </View>
-                <Text style={styles.toolTitle}>{item.title}</Text>
-              </TouchableOpacity>
-            ))}
+            {/* Upcoming Appointments */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
+                <TouchableOpacity>
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.appointmentsContainer}>
+                {upcomingAppointments.map((appointment) => (
+                  <TouchableOpacity key={appointment.id} style={styles.appointmentCard}>
+                    <View style={styles.appointmentInfo}>
+                      <View style={styles.patientAvatar}>
+                        <Text style={styles.avatarText}>{appointment.avatar}</Text>
+                      </View>
+                      <View style={styles.appointmentDetails}>
+                        <Text style={styles.patientName}>{appointment.name}</Text>
+                        <Text style={styles.appointmentType}>{appointment.type}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.appointmentTime}>
+                      <Text style={styles.timeText}>{appointment.time}</Text>
+                      <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Medical Tools Grid */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Medical Tools</Text>
+              <View style={styles.toolsGrid}>
+                {menuItems.map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.toolCard}>
+                    <View style={[styles.toolIcon, { backgroundColor: `${item.color}20` }]}>
+                      <Ionicons name={item.icon} size={20} color={item.color} />
+                    </View>
+                    <Text style={styles.toolTitle}>{item.title}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </>
+        )}
+
+        {activeTab === 'Appointments' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Appointment Requests</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statNumber}>{appointmentStats.total}</Text>
+                <Text style={styles.statLabel}>Total</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statNumber}>{appointmentStats.confirmed}</Text>
+                <Text style={styles.statLabel}>Approved</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statNumber}>{appointmentStats.pending}</Text>
+                <Text style={styles.statLabel}>Pending</Text>
+              </View>
+            </View>
+            
+            {appointments.length > 0 ? (
+              <View style={styles.appointmentsGrid}>
+                {appointments.map((appointment) => (
+                  <View key={appointment.id} style={styles.appointmentGridCard}>
+                    {/* Header with patient info */}
+                    <View style={styles.appointmentCardHeader}>
+                      <View style={styles.patientInfoRow}>
+                        <View style={styles.patientAvatar}>
+                          <Text style={styles.avatarText}>
+                            {(appointment.patientName || appointment.userName || 'P').charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.patientInfoText}>
+                          <Text style={styles.patientName}>
+                            {appointment.patientName || appointment.userName || 'Patient'}
+                          </Text>
+                          <Text style={styles.patientEmail}>
+                            {appointment.patientEmail || appointment.userEmail}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={[styles.statusIndicator, 
+                        appointment.status === 'confirmed' ? styles.confirmedIndicator : 
+                        appointment.status === 'rejected' ? styles.rejectedIndicator : styles.pendingIndicator
+                      ]}>
+                        <Text style={styles.statusIndicatorText}>
+                          {appointment.status === 'confirmed' ? 'APPROVED' : 
+                           appointment.status === 'rejected' ? 'REJECTED' : 'PENDING'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Appointment details */}
+                    <View style={styles.appointmentDetailsGrid}>
+                      <View style={styles.dateTimeRow}>
+                        <View style={styles.dateTimeCard}>
+                          <Ionicons name="calendar" size={18} color="#4ECDC4" />
+                          <View style={styles.dateTimeInfo}>
+                            <Text style={styles.dateTimeLabel}>Date</Text>
+                            <Text style={styles.dateTimeValue}>{appointment.selectedDay}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.dateTimeCard}>
+                          <Ionicons name="time" size={18} color="#4ECDC4" />
+                          <View style={styles.dateTimeInfo}>
+                            <Text style={styles.dateTimeLabel}>Time</Text>
+                            <Text style={styles.dateTimeValue}>{appointment.selectedTime}</Text>
+                          </View>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.detailItem}>
+                        <Ionicons name="mail-outline" size={16} color="#4ECDC4" />
+                        <Text style={styles.detailText}>{appointment.patientEmail || appointment.userEmail}</Text>
+                      </View>
+                      
+                      {appointment.notes && (
+                        <View style={styles.notesSection}>
+                          <View style={styles.detailItem}>
+                            <Ionicons name="document-text-outline" size={16} color="#4ECDC4" />
+                            <Text style={styles.notesLabel}>Patient Notes:</Text>
+                          </View>
+                          <Text style={styles.notesText}>{appointment.notes}</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Action buttons - only show for pending appointments */}
+                    {appointment.status === 'pending' && (
+                      <View style={styles.actionButtonsRow}>
+                        <TouchableOpacity 
+                          style={styles.rejectButton}
+                          onPress={() => handleAppointmentAction(appointment.id, 'rejected')}
+                        >
+                          <Ionicons name="close" size={16} color="white" />
+                          <Text style={styles.rejectButtonText}>Reject</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.approveButton}
+                          onPress={() => handleAppointmentAction(appointment.id, 'confirmed')}
+                        >
+                          <Ionicons name="checkmark" size={16} color="white" />
+                          <Text style={styles.approveButtonText}>Approve</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {/* Already processed appointments - show status */}
+                    {appointment.status !== 'pending' && (
+                      <View style={styles.processedStatus}>
+                        <Text style={styles.processedStatusText}>
+                          {appointment.status === 'confirmed' ? '✓ Appointment Approved' : '✗ Appointment Rejected'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="calendar-outline" size={50} color="#ccc" />
+                <Text style={styles.emptyStateText}>No appointment requests yet</Text>
+              </View>
+            )}
           </View>
-        </View>
+        )}
+
+        {activeTab === 'Patients' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Patients</Text>
+            {patients.length > 0 ? (
+              patients.map((patient, index) => (
+                <View key={patient.email || index} style={styles.patientCard}>
+                  <View style={styles.patientInfo}>
+                    <View style={styles.patientAvatar}>
+                      <Ionicons name="person" size={20} color="#4ECDC4" />
+                    </View>
+                    <View style={styles.patientDetails}>
+                      <Text style={styles.patientName}>
+                        {patient.name || 'Patient'}
+                      </Text>
+                      <Text style={styles.patientEmail}>
+                        {patient.email}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.patientStats}>
+                    <Text style={styles.appointmentCount}>
+                      {patient.appointments} appointment{patient.appointments !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="people-outline" size={50} color="#ccc" />
+                <Text style={styles.emptyStateText}>No patients yet</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.bottomSpacing} />
         </ScrollView>
@@ -394,6 +814,207 @@ const DoctorDashboard = () => {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Schedule Modal */}
+      <Modal
+        visible={showScheduleModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowScheduleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Manage Schedule</Text>
+              <TouchableOpacity 
+                onPress={() => setShowScheduleModal(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              {/* Current Schedules List */}
+              <View style={styles.sectionContainer}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionLabel}>Current Schedules</Text>
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => setShowAddForm(!showAddForm)}
+                  >
+                    <Ionicons name={showAddForm ? "remove" : "add"} size={20} color="white" />
+                    <Text style={styles.addButtonText}>
+                      {showAddForm ? "Cancel" : "Add New"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {Object.keys(doctorTimings).length > 0 ? (
+                  <View style={styles.schedulesList}>
+                    {Object.entries(doctorTimings).map(([day, timing]) => (
+                      <View key={day} style={styles.scheduleCard}>
+                        <View style={styles.scheduleCardLeft}>
+                          <View style={styles.dayBadge}>
+                            <Text style={styles.dayBadgeText}>{day.substring(0, 3)}</Text>
+                          </View>
+                          <View style={styles.scheduleDetails}>
+                            <Text style={styles.scheduleDayName}>{day}</Text>
+                            <Text style={styles.scheduleTimeRange}>
+                              {timing.startTime} - {timing.endTime}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.scheduleActions}>
+                          <TouchableOpacity
+                            style={styles.editButton}
+                            onPress={() => editSchedule(day, timing)}
+                          >
+                            <Ionicons name="pencil" size={16} color="#4ECDC4" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.deleteButton}
+                            onPress={() => confirmDelete(day)}
+                          >
+                            <Ionicons name="trash" size={16} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="calendar-outline" size={48} color="#9CA3AF" />
+                    <Text style={styles.emptyStateText}>No schedules set yet</Text>
+                    <Text style={styles.emptyStateSubtext}>Tap "Add New" to create your first schedule</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Add/Edit Form */}
+              {showAddForm && (
+                <>
+                  <View style={styles.formDivider} />
+                  <View style={styles.sectionContainer}>
+                    <Text style={styles.sectionLabel}>
+                      {editingSchedule ? `Edit ${editingSchedule} Schedule` : "Add New Schedule"}
+                    </Text>
+
+                    {/* Day Selection */}
+                    <View style={styles.formSection}>
+                      <Text style={styles.formLabel}>Select Day</Text>
+                      <View style={styles.daysGrid}>
+                        {daysOfWeek.map((day) => (
+                          <TouchableOpacity
+                            key={day}
+                            style={[
+                              styles.dayButton,
+                              selectedDay === day && styles.selectedDayButton,
+                              doctorTimings[day] && selectedDay !== day && styles.disabledDayButton
+                            ]}
+                            onPress={() => setSelectedDay(day)}
+                            disabled={doctorTimings[day] && selectedDay !== day}
+                          >
+                            <Text style={[
+                              styles.dayButtonText,
+                              selectedDay === day && styles.selectedDayButtonText,
+                              doctorTimings[day] && selectedDay !== day && styles.disabledDayButtonText
+                            ]}>
+                              {day.substring(0, 3)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+
+                    {/* Time Selection */}
+                    <View style={styles.formSection}>
+                      <Text style={styles.formLabel}>Start Time</Text>
+                      <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.timeScrollView}
+                      >
+                        <View style={styles.timeGrid}>
+                          {timeSlots.map((time) => (
+                            <TouchableOpacity
+                              key={`start-${time}`}
+                              style={[
+                                styles.timeButton,
+                                selectedStartTime === time && styles.selectedTimeButton
+                              ]}
+                              onPress={() => setSelectedStartTime(time)}
+                            >
+                              <Text style={[
+                                styles.timeButtonText,
+                                selectedStartTime === time && styles.selectedTimeButtonText
+                              ]}>
+                                {time}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    </View>
+
+                    <View style={styles.formSection}>
+                      <Text style={styles.formLabel}>End Time</Text>
+                      <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.timeScrollView}
+                      >
+                        <View style={styles.timeGrid}>
+                          {timeSlots.map((time) => (
+                            <TouchableOpacity
+                              key={`end-${time}`}
+                              style={[
+                                styles.timeButton,
+                                selectedEndTime === time && styles.selectedTimeButton
+                              ]}
+                              onPress={() => setSelectedEndTime(time)}
+                            >
+                              <Text style={[
+                                styles.timeButtonText,
+                                selectedEndTime === time && styles.selectedTimeButtonText
+                              ]}>
+                                {time}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    </View>
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            {/* Modal Footer */}
+            {showAddForm && (
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    resetScheduleForm();
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={saveSchedule}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {editingSchedule ? "Update Schedule" : "Save Schedule"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -762,6 +1383,660 @@ const styles = StyleSheet.create({
 
   bottomSpacing: {
     height: 20,
+  },
+
+  // Schedule Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    width: '100%',
+    height: '85%',
+    display: 'flex',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 0,
+  },
+  sectionContainer: {
+    marginBottom: 16,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4ECDC4',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  schedulesList: {
+    gap: 8,
+  },
+  scheduleCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  scheduleCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  dayBadge: {
+    backgroundColor: '#4ECDC4',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 12,
+  },
+  dayBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  scheduleDetails: {
+    flex: 1,
+  },
+  scheduleDayName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 2,
+  },
+  scheduleTimeRange: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  scheduleActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editButton: {
+    backgroundColor: '#f0fdfa',
+    borderRadius: 6,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: '#4ECDC4',
+  },
+  deleteButton: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 6,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748b',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  formDivider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginVertical: 16,
+  },
+  formSection: {
+    marginBottom: 16,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  disabledDayButton: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
+    opacity: 0.5,
+  },
+  disabledDayButtonText: {
+    color: '#9CA3AF',
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  dayButton: {
+    flex: 1,
+    minWidth: '13%',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  selectedDayButton: {
+    backgroundColor: '#4ECDC4',
+    borderColor: '#4ECDC4',
+  },
+  dayButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  selectedDayButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  timeScrollView: {
+    maxHeight: 60,
+  },
+  timeGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 20,
+  },
+  timeButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  selectedTimeButton: {
+    backgroundColor: '#4ECDC4',
+    borderColor: '#4ECDC4',
+  },
+  timeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  selectedTimeButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  currentScheduleScrollView: {
+    maxHeight: 150, // Reduced height for better fit
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  currentSchedule: {
+    padding: 16,
+  },
+  scheduleItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: 'white',
+  },
+  scheduleItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  scheduleDay: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginRight: 8,
+  },
+  scheduleStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22c55e',
+    marginLeft: 4,
+  },
+  scheduleTime: {
+    fontSize: 14,
+    color: '#4ECDC4',
+    fontWeight: '600',
+    backgroundColor: '#f0fdfa',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4ECDC4',
+    overflow: 'hidden',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    backgroundColor: 'white',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#4ECDC4',
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  // Bottom Navigation Styles
+  bottomNavigation: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    paddingBottom: 8,
+    paddingTop: 8,
+  },
+  navTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  activeNavTab: {
+    backgroundColor: '#f0fffe',
+    borderRadius: 8,
+    marginHorizontal: 4,
+  },
+  navTabText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  activeNavTabText: {
+    color: '#4ECDC4',
+    fontWeight: '600',
+  },
+  // Appointments Tab Styles
+  statsRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#4ECDC4',
+    marginBottom: 4,
+  },
+  // New Appointment Grid Styles
+  appointmentsGrid: {
+    gap: 16,
+  },
+  appointmentGridCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  appointmentCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  patientInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  patientInfoText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  statusIndicator: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  confirmedIndicator: {
+    backgroundColor: '#dcfce7',
+  },
+  rejectedIndicator: {
+    backgroundColor: '#fee2e2',
+  },
+  pendingIndicator: {
+    backgroundColor: '#fef3c7',
+  },
+  statusIndicatorText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  appointmentDetailsGrid: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8,
+  },
+  dateTimeCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0fdfa',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#4ECDC4',
+    gap: 8,
+  },
+  dateTimeInfo: {
+    flex: 1,
+  },
+  dateTimeLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  dateTimeValue: {
+    fontSize: 14,
+    color: '#1e293b',
+    fontWeight: '700',
+  },
+  notesSection: {
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4ECDC4',
+  },
+  notesLabel: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontStyle: 'italic',
+    lineHeight: 18,
+    marginLeft: 24,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#64748b',
+    flex: 1,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  rejectButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 6,
+  },
+  rejectButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  approveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#22c55e',
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 6,
+  },
+  approveButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  processedStatus: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  processedStatusText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  // Legacy styles (keeping for compatibility)
+  appointmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  confirmedBadge: {
+    backgroundColor: '#dcfce7',
+  },
+  pendingBadge: {
+    backgroundColor: '#fef3c7',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  appointmentDetail: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  appointmentNotes: {
+    fontSize: 13,
+    color: '#475569',
+    fontStyle: 'italic',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  // Patients Tab Styles
+  patientCard: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  patientInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  patientDetails: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  patientEmail: {
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  patientStats: {
+    alignItems: 'flex-end',
+  },
+  appointmentCount: {
+    fontSize: 12,
+    color: '#4ECDC4',
+    fontWeight: '600',
+  },
+  // Empty State Styles
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#94a3b8',
+    marginTop: 12,
   },
 });
 

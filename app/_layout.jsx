@@ -22,6 +22,7 @@ export default function RootLayout() {
         <Stack.Screen name="video-call" options={{ headerShown: false }} />
         <Stack.Screen name="payment-method" options={{ headerShown: false }} />
         <Stack.Screen name="personal-information" options={{ headerShown: false }} />
+        <Stack.Screen name="active-appointments" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />

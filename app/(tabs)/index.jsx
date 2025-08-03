@@ -54,6 +54,8 @@ const HomeScreen = () => {
   const [showAllDoctors, setShowAllDoctors] = useState(false);
   const [userName, setUserName] = useState('User');
   const [userPhoto, setUserPhoto] = useState(null);
+  const [doctorsData, setDoctorsData] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
   
   // Language cycling function
   const cycleLanguage = () => {
@@ -92,7 +94,59 @@ const HomeScreen = () => {
       }
     };
 
+    // Load doctors from Firebase
+    const loadDoctorsData = async () => {
+      try {
+        setLoadingDoctors(true);
+        console.log('Starting to load doctors from Firebase...');
+        
+        const response = await fetch(
+          'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
+        );
+        const doctorsResponse = await response.json();
+        
+        console.log('Firebase response:', doctorsResponse);
+        
+        if (doctorsResponse) {
+          // Convert Firebase object to array with IDs
+          const doctorsArray = Object.keys(doctorsResponse).map(key => ({
+            id: key,
+            ...doctorsResponse[key],
+            // Generate colors for UI
+            colors: generateDoctorColors(key),
+            isOnline: Math.random() > 0.3, // Random online status
+            responseTime: `${Math.floor(Math.random() * 15) + 3} mins`,
+            patients: `${(Math.random() * 3 + 1).toFixed(1)}K+`,
+            nextAvailable: getNextAvailableTime(),
+            isVerified: true,
+            // Normalize specialty field
+            specialty: doctorsResponse[key].specialization || doctorsResponse[key].specialty || 'General Medicine'
+          }));
+          
+          console.log('All doctors before filtering:', doctorsArray);
+          
+          // Filter only approved doctors (those with approvedAt field)
+          const approvedDoctors = doctorsArray.filter(doctor => 
+            doctor.approvedAt && doctor.approvedAt !== null
+          );
+          
+          setDoctorsData(approvedDoctors);
+          console.log('Loaded doctors:', approvedDoctors.length);
+          console.log('Doctor data sample:', approvedDoctors[0]);
+        } else {
+          console.log('No doctors data received from Firebase');
+          setDoctorsData([]);
+        }
+      } catch (error) {
+        console.error('Error loading doctors:', error);
+        setDoctorsData([]);
+      } finally {
+        setLoadingDoctors(false);
+      }
+    };
+
     loadUserData();
+    loadDoctorsData();
 
     // Animation
     Animated.parallel([
@@ -133,7 +187,7 @@ const HomeScreen = () => {
       seeAll: "See All",
       bookAppointment: "Book Doctor",
       healthRecords: "Health Records",
-      emergencyCall: "Emergency",
+      activeAppointments: "Active Appointments",
       findPharmacy: "Find Medicine",
       skinDisease: "Skin Problem\nDetector",
       eyeCondition: "Eye Problem\nAnalyzer", 
@@ -161,7 +215,7 @@ const HomeScreen = () => {
       seeAll: "सभी देखें",
       bookAppointment: "डॉक्टर बुक करें",
       healthRecords: "स्वास्थ्य रिकॉर्ड",
-      emergencyCall: "आपातकाल",
+      activeAppointments: "सक्रिय अपॉइंटमेंट",
       findPharmacy: "दवा खोजें",
       skinDisease: "त्वचा समस्या\nजांच",
       eyeCondition: "आंख समस्या\nविश्लेषक",
@@ -189,7 +243,7 @@ const HomeScreen = () => {
       seeAll: "అన్నీ చూడండి",
       bookAppointment: "వైద్యుడిని బుక్ చేయండి",
       healthRecords: "ఆరోగ్య రికార్డులు",
-      emergencyCall: "అత్యవసరం",
+      activeAppointments: "క్రియాశీల అపాయింట్‌మెంట్లు",
       findPharmacy: "మందు కనుగొనండి",
       skinDisease: "చర్మ సమస్య\nగుర్తింపు",
       eyeCondition: "కంటి సమస్య\nవిశ్లేషణ",
@@ -217,7 +271,7 @@ const HomeScreen = () => {
       seeAll: "அனைத்தையும் பார்க்க",
       bookAppointment: "மருத்துவரை பதிவு செய்யுங்கள்",
       healthRecords: "உடல்நலப் பதிவுகள்",
-      emergencyCall: "அவசரகாலம்",
+      activeAppointments: "செயல்படும் முந்தைய நியமனங்கள்",
       findPharmacy: "மருந்து கண்டுபிடிக்க",
       skinDisease: "தோல் பிரச்சனை\nகண்டறிதல்",
       eyeCondition: "கண் பிரச்சனை\nபகுப்பாய்வு",
@@ -236,6 +290,34 @@ const HomeScreen = () => {
   };
 
   const t = translations[selectedLanguage] || translations.en;
+
+  // Helper functions for doctor data
+  const generateDoctorColors = (id) => {
+    const colorSets = [
+      ['#667eea', '#764ba2'],
+      ['#4ECDC4', '#44D8A8'],
+      ['#6C5CE7', '#A29BFE'],
+      ['#FF9A8B', '#A8E6CF'],
+      ['#FFD93D', '#6BCF7F'],
+      ['#A8E6CF', '#88D8C0'],
+      ['#fd746c', '#ff9068'],
+      ['#36d1dc', '#5b86e5']
+    ];
+    const index = id.length % colorSets.length;
+    return colorSets[index];
+  };
+
+  const getNextAvailableTime = () => {
+    const times = [
+      'Today 2:00 PM',
+      'Today 5:00 PM',
+      'Tomorrow 10 AM',
+      'Tomorrow 11 AM',
+      'Today 4:30 PM',
+      'Tomorrow 9 AM'
+    ];
+    return times[Math.floor(Math.random() * times.length)];
+  };
 
   // Medical categories data - Simple and Visual for All Users
   const medicalCategories = [
@@ -303,117 +385,7 @@ const HomeScreen = () => {
       route: '/health/DiabetesGlucoseRiskMonitor',
       image: bloodSugarMonitorImage
     }
-  ];  // Doctors data - Simple for farmers
-  const doctorsData = [
-    {
-      id: '1',
-      name: 'Dr. Sarah Johnson',
-      specialty: 'Heart Specialist',
-      subSpecialty: 'Cardiologist',
-      rating: 4.9,
-      reviews: 245,
-      experience: '8 years',
-      location: 'City Hospital',
-      distance: '2.5 km',
-      image: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&h=400&fit=crop&crop=face',
-      isOnline: true,
-      isVerified: true,
-      nextAvailable: 'Today 2:00 PM',
-      colors: ['#667eea', '#764ba2'],
-      responseTime: '5 mins',
-      patients: '2.5K+'
-    },
-    {
-      id: '2',
-      name: 'Dr. Michael Chen',
-      specialty: 'Skin Specialist',
-      subSpecialty: 'Dermatologist',
-      rating: 4.8,
-      reviews: 189,
-      experience: '6 years',
-      location: 'Skin Care Clinic',
-      distance: '1.2 km',
-      image: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=400&h=400&fit=crop&crop=face',
-      isOnline: false,
-      isVerified: true,
-      nextAvailable: 'Tomorrow 10 AM',
-      colors: ['#4ECDC4', '#44D8A8'],
-      responseTime: '10 mins',
-      patients: '1.8K+'
-    },
-    {
-      id: '3',
-      name: 'Dr. Emily Rodriguez',
-      specialty: 'Brain Specialist',
-      subSpecialty: 'Neurologist',
-      rating: 4.9,
-      reviews: 312,
-      experience: '12 years',
-      location: 'Brain & Spine Center',
-      distance: '3.8 km',
-      image: 'https://images.unsplash.com/photo-1594824475317-5cd5ad103e0c?w=400&h=400&fit=crop&crop=face',
-      isOnline: true,
-      isVerified: true,
-      nextAvailable: 'Today 5:00 PM',
-      colors: ['#6C5CE7', '#A29BFE'],
-      responseTime: '3 mins',
-      patients: '3.2K+'
-    },
-    {
-      id: '4',
-      name: 'Dr. James Wilson',
-      specialty: 'Bone Specialist',
-      subSpecialty: 'Orthopedic',
-      rating: 4.7,
-      reviews: 156,
-      experience: '10 years',
-      location: 'Bone & Joint Clinic',
-      distance: '4.1 km',
-      image: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=400&h=400&fit=crop&crop=face',
-      isOnline: true,
-      isVerified: true,
-      nextAvailable: 'Tomorrow 11 AM',
-      colors: ['#FF9A8B', '#A8E6CF'],
-      responseTime: '8 mins',
-      patients: '2.1K+'
-    },
-    {
-      id: '5',
-      name: 'Dr. Lisa Wang',
-      specialty: 'Eye Specialist',
-      subSpecialty: 'Ophthalmologist',
-      rating: 4.8,
-      reviews: 203,
-      experience: '7 years',
-      location: 'Vision Care Center',
-      distance: '2.8 km',
-      image: 'https://images.unsplash.com/photo-1551836022-deb4988cc6c0?w=400&h=400&fit=crop&crop=face',
-      isOnline: false,
-      isVerified: true,
-      nextAvailable: 'Today 4:30 PM',
-      colors: ['#FFD93D', '#6BCF7F'],
-      responseTime: '12 mins',
-      patients: '1.9K+'
-    },
-    {
-      id: '6',
-      name: 'Dr. Robert Taylor',
-      specialty: 'Lung Specialist',
-      subSpecialty: 'Pulmonologist',
-      rating: 4.6,
-      reviews: 134,
-      experience: '9 years',
-      location: 'Respiratory Clinic',
-      distance: '5.2 km',
-      image: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=400&h=400&fit=crop&crop=face',
-      isOnline: true,
-      isVerified: true,
-      nextAvailable: 'Tomorrow 9 AM',
-      colors: ['#A8E6CF', '#88D8C0'],
-      responseTime: '15 mins',
-      patients: '1.6K+'
-    }
-  ];
+  ];  
 
   // Quick actions data - Visual and Simple
   const quickActions = [
@@ -422,7 +394,8 @@ const HomeScreen = () => {
       title: t.bookAppointment, 
       icon: 'calendar', 
       colors: ['#6366f1', '#8b5cf6'],
-      bgColor: '#F0F0FF'
+      bgColor: '#F0F0FF',
+      route: '/explore'
     },
     { 
       id: '2', 
@@ -433,17 +406,18 @@ const HomeScreen = () => {
     },
     { 
       id: '3', 
-      title: t.emergencyCall, 
-      icon: 'call', 
-      colors: ['#ef4444', '#f87171'],
-      bgColor: '#FFF0F0'
+      title: t.activeAppointments, 
+      icon: 'calendar-outline', 
+      colors: ['#f59e0b', '#fbbf24'],
+      bgColor: '#FFFEF0',
+      route: '/active-appointments'
     },
     { 
       id: '4', 
       title: t.findPharmacy, 
       icon: 'medical', 
-      colors: ['#f59e0b', '#fbbf24'],
-      bgColor: '#FFFEF0'
+      colors: ['#ef4444', '#f87171'],
+      bgColor: '#FFF0F0'
     },
   ];
 
@@ -525,7 +499,14 @@ const HomeScreen = () => {
         }
       ]}
     >
-      <TouchableOpacity style={styles.quickActionContent}>
+      <TouchableOpacity 
+        style={styles.quickActionContent}
+        onPress={() => {
+          if (item.route) {
+            router.push(item.route);
+          }
+        }}
+      >
         <LinearGradient
           colors={item.colors}
           style={styles.quickActionIcon}
@@ -679,7 +660,15 @@ const HomeScreen = () => {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            <Ionicons name="person" size={35} color="white" />
+            {item.photo ? (
+              <Image 
+                source={{ uri: item.photo }} 
+                style={styles.doctorCircleImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Ionicons name="person" size={35} color="white" />
+            )}
           </LinearGradient>
           
           {/* Verified Badge - Top Right */}
@@ -689,16 +678,20 @@ const HomeScreen = () => {
             </View>
           )}
           
-          {/* Rating Badge - Top Left */}
-          <View style={styles.ratingBadgeCircle}>
-            <AntDesign name="star" size={9} color="#FFD700" />
-            <Text style={styles.ratingNumberCircle}>{item.rating}</Text>
-          </View>
+          {/* Online Status Badge - Top Left */}
+          {item.isOnline && (
+            <View style={styles.onlineBadgeCircle}>
+              <View style={styles.onlineDotSmall} />
+            </View>
+          )}
         </View>
         
-        {/* Only Doctor Name */}
-        <Text style={styles.doctorNameOnly} numberOfLines={2}>
-          {item.name}
+        {/* Doctor Name and Specialty */}
+        <Text style={styles.doctorNameOnly} numberOfLines={1}>
+          {item.name || 'Dr. Unknown'}
+        </Text>
+        <Text style={styles.doctorSpecialtySmall} numberOfLines={1}>
+          {item.specialty || item.specialization || 'Specialist'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -872,18 +865,28 @@ const HomeScreen = () => {
             </View>
             
             {/* Horizontal Doctor Profiles */}
-            <FlatList
-              data={doctorsData}
-              renderItem={({ item }) => renderCircleDoctorProfile(item)}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.doctorsHorizontalContainer}
-              ItemSeparatorComponent={() => <View style={{ width: 6 }} />}
-              decelerationRate="fast"
-              snapToInterval={96} // Width of circle container + separator
-              snapToAlignment="start"
-            />
+            {loadingDoctors ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading doctors...</Text>
+              </View>
+            ) : doctorsData.length > 0 ? (
+              <FlatList
+                data={doctorsData}
+                renderItem={({ item }) => renderCircleDoctorProfile(item)}
+                keyExtractor={(item) => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.doctorsHorizontalContainer}
+                ItemSeparatorComponent={() => <View style={{ width: 6 }} />}
+                decelerationRate="fast"
+                snapToInterval={96} // Width of circle container + separator
+                snapToAlignment="start"
+              />
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No doctors available</Text>
+              </View>
+            )}
           </View>
 
           {/* Health Analysis Categories - Horizontal Scrollable with Images */}
@@ -1669,6 +1672,53 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 14,
     maxWidth: 85,
+    marginBottom: 2,
+  },
+  doctorSpecialtySmall: {
+    fontSize: 10,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 12,
+    maxWidth: 85,
+  },
+  doctorCircleImage: {
+    width: 69,
+    height: 69,
+    borderRadius: 34.5,
+  },
+  onlineBadgeCircle: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    backgroundColor: '#22C55E',
+    borderRadius: 8,
+    padding: 3,
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  onlineDotSmall: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'white',
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontStyle: 'italic',
+  },
+  emptyContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontStyle: 'italic',
   },
   
   // New styles for Health Service Card
