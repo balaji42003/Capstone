@@ -3,18 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Dimensions,
-  FlatList,
-  Image,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Animated,
+    Dimensions,
+    FlatList,
+    Image,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 // Conditional import for LinearGradient with fallback
@@ -418,6 +418,14 @@ const HomeScreen = () => {
       icon: 'medical', 
       colors: ['#ef4444', '#f87171'],
       bgColor: '#FFF0F0'
+    },
+    { 
+      id: '5', 
+      title: 'Test Video Call', 
+      icon: 'videocam', 
+      colors: ['#e53e3e', '#f56565'],
+      bgColor: '#FFF0F0',
+      route: '/video-call-test'
     },
   ];
 

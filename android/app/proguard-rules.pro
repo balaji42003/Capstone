@@ -12,3 +12,8 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
+# Zego Cloud ProGuard Rules (Official Documentation)
+-keep class **.zego.**  { *; }
+
+-keep class com.hiennv.flutter_callkit_incoming.SharedPreferencesUtils* {*;}
+-keep class com.fasterxml.jackson.** {*;}
