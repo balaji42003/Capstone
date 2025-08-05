@@ -133,36 +133,56 @@ const AdminDashboard = () => {
     return Math.floor(1000 + Math.random() * 9000).toString();
   };
 
-  const sendVerificationEmail = async (doctorEmail, doctorName, verificationCode) => {
-    const emailData = {
-      name: doctorName,
-      email: doctorEmail,
-      verification_code: verificationCode
-    };
-
+  // Simple connectivity test
+  const testServerConnectivity = async () => {
     try {
-      console.log('Sending verification email with data:', emailData);
+      console.log('Testing server connectivity...');
+      const response = await fetch('http://10.3.5.210:5008/', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      console.log('Connectivity test - Status:', response.status);
+      const text = await response.text();
+      console.log('Connectivity test - Response:', text);
+      
+      Alert.alert('Connectivity Test', `Server Status: ${response.status}\nResponse: ${text.substring(0, 100)}...`);
+    } catch (error) {
+      console.error('Connectivity test failed:', error);
+      Alert.alert('Connectivity Test Failed', `Error: ${error.message}`);
+    }
+  };
 
+  const sendVerificationEmail = async (doctorEmail, doctorName, verificationCode) => {
+    try {
       const response = await fetch('http://10.3.5.210:5008/send-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: JSON.stringify(emailData),
+        body: JSON.stringify({
+          name: doctorName,
+          email: doctorEmail,
+          verification_code: verificationCode
+        }),
       });
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        console.log('Verification email sent successfully to:', doctorEmail);
-        return true;
-      } else {
-        console.error('Flask email error:', result.error);
+      const text = await response.text();
+      console.log('Raw response:', text);
+      
+      if (!response.ok) {
+        console.error('HTTP Error:', response.status);
         return false;
       }
+
+      const result = JSON.parse(text);
+      return result.success === true;
+      
     } catch (error) {
-      console.error('Failed to send verification email:', error);
-      console.error('Error details:', error.message);
+      console.error('Email error:', error.message);
       return false;
     }
   };
@@ -295,31 +315,112 @@ const AdminDashboard = () => {
     };
 
     try {
+      console.log('=== EMAIL TEST STARTED ===');
       console.log('Testing email functionality...');
-      console.log('Sending test email with data:', emailData);
+      console.log('Sending test email with data:', JSON.stringify(emailData, null, 2));
+
+      // Add timeout to the fetch request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // Changed from 30000 to 60000
 
       const response = await fetch('http://10.3.5.210:5008/send-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify(emailData),
+        signal: controller.signal,
       });
 
-      const result = await response.json();
+      clearTimeout(timeoutId);
 
-      if (response.ok && result.success) {
-        console.log('Test email sent successfully!');
-        Alert.alert('Success!', 'Test email sent successfully to 99220042003@klu.ac.in!');
+      console.log('=== RESPONSE RECEIVED ===');
+      console.log('Response status:', response.status);
+      console.log('Response statusText:', response.statusText);
+      console.log('Response ok:', response.ok);
+      console.log('Response headers:', JSON.stringify([...response.headers.entries()]));
+
+      // Check if response is ok first
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('=== HTTP ERROR ===');
+        console.error('HTTP Error:', response.status, response.statusText);
+        console.error('Error text:', errorText);
+        Alert.alert('Test Failed', `HTTP Error ${response.status}: ${response.statusText}\n\n${errorText}`);
+        return false;
+      }
+
+      // Get response as text first
+      const responseText = await response.text();
+      console.log('=== RAW RESPONSE ===');
+      console.log('Raw response text:', responseText);
+      console.log('Response length:', responseText.length);
+
+      // Check if response is empty
+      if (!responseText || responseText.trim() === '') {
+        console.error('=== EMPTY RESPONSE ===');
+        Alert.alert('Test Failed', 'Server returned empty response');
+        return false;
+      }
+
+      // Try to parse JSON
+      let result;
+      try {
+        result = JSON.parse(responseText);
+        console.log('=== PARSED JSON ===');
+        console.log('Parsed result:', JSON.stringify(result, null, 2));
+      } catch (parseError) {
+        console.error('=== JSON PARSE ERROR ===');
+        console.error('JSON Parse Error:', parseError.message);
+        console.error('Response was:', responseText);
+        Alert.alert('Test Failed', `Invalid JSON response from server:\n\n${responseText.substring(0, 200)}...`);
+        return false;
+      }
+
+      // Check for success in the result
+      console.log('=== SUCCESS CHECK ===');
+      console.log('result.success type:', typeof result.success);
+      console.log('result.success value:', result.success);
+      console.log('result.message:', result.message);
+      console.log('result.error:', result.error);
+
+      if (result.success === true || result.success === 'true') {
+        console.log('=== SUCCESS! ===');
+        Alert.alert(
+          'Success!', 
+          `Test email sent successfully to 99220042003@klu.ac.in!\n\nMessage: ${result.message || 'Email sent'}\n\nServer Response: ${responseText}`
+        );
         return true;
       } else {
-        console.error('Flask email error:', result.error);
-        Alert.alert('Test Failed', `Email failed: ${result.error || 'Unknown error'}`);
+        console.error('=== EMAIL FAILED ===');
+        const errorMsg = result.error || result.message || 'Unknown error';
+        console.error('Flask email error:', errorMsg);
+        Alert.alert(
+          'Test Failed', 
+          `Email failed: ${errorMsg}\n\nFull Response: ${responseText}`
+        );
         return false;
       }
     } catch (error) {
-      console.error('Fetch error:', error);
-      Alert.alert('Test Failed', 'Something went wrong while sending the email. Make sure Flask server is running.');
+      console.error('=== CATCH ERROR ===');
+      console.error('Error type:', error.constructor.name);
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      
+      let errorMessage = `Network error: ${error.message}`;
+      
+      if (error.name === 'AbortError') {
+        errorMessage = 'Request timed out after 30 seconds. Server might be slow or down.';
+      } else if (error.name === 'TypeError' && error.message.includes('Network request failed')) {
+        errorMessage = 'Network connection failed. Check your internet connection.';
+      }
+      
+      Alert.alert(
+        'Test Failed', 
+        `${errorMessage}\n\nError Details:\nType: ${error.name}\nMessage: ${error.message}\n\nMake sure you have internet connection and the server is running.`
+      );
       return false;
     }
   };
@@ -483,7 +584,7 @@ const AdminDashboard = () => {
           {[
             { title: 'Pending Requests', icon: 'people', color: '#8b5cf6', action: () => setActiveTab('Doctors') },
             { title: 'View Analytics', icon: 'analytics', color: '#06b6d4', action: () => setActiveTab('Analytics') },
-            { title: 'System Settings', icon: 'settings', color: '#84cc16', action: () => setActiveTab('Settings') },
+            { title: 'Test Connectivity', icon: 'wifi', color: '#84cc16', action: testServerConnectivity },
             { title: 'Test Email', icon: 'mail', color: '#f97316', action: testEmailFunctionality },
           ].map((action, index) => (
             <TouchableOpacity key={index} style={styles.actionCard} onPress={action.action}>

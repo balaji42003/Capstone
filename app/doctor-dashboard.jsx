@@ -63,23 +63,30 @@ const DoctorDashboard = () => {
     const loadDoctorData = async () => {
       try {
         const doctorSession = await AsyncStorage.getItem('doctorSession');
+        console.log('Raw doctor session:', doctorSession);
+        
         if (doctorSession) {
           const sessionData = JSON.parse(doctorSession);
+          console.log('Parsed session data:', sessionData);
           
           // Set Google data first
           setDoctorName(sessionData.name || '');
           setDoctorPhoto(sessionData.photo || null);
           
           // Get doctor's unique ID from session
-          const doctorId = sessionData.doctorId;
+          const sessionDoctorId = sessionData.doctorId;
           const doctorEmail = sessionData.email;
           
-          console.log('Session data:', { doctorId, doctorEmail });
+          console.log('Session data:', { sessionDoctorId, doctorEmail });
           
-          if (doctorId) {
+          if (sessionDoctorId) {
+            console.log('Using doctor ID from session:', sessionDoctorId);
+            // Set doctor ID immediately
+            setDoctorId(sessionDoctorId);
+            
             // Fetch specific doctor data using the unique ID
             const response = await fetch(
-              `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}.json`
+              `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${sessionDoctorId}.json`
             );
             const doctorData = await response.json();
             
@@ -88,10 +95,9 @@ const DoctorDashboard = () => {
               // Use the data from Firebase
               setDoctorName(doctorData.name || sessionData.name || 'Doctor');
               setDoctorSpecialty(doctorData.specialty || doctorData.specialization || 'Medical Professional');
-              setDoctorId(doctorId); // Store doctor ID for schedule updates
               setDoctorTimings(doctorData.timings || {}); // Load existing timings
               console.log('Doctor data loaded:', {
-                id: doctorId,
+                id: sessionDoctorId,
                 name: doctorData.name,
                 specialty: doctorData.specialty,
                 specialization: doctorData.specialization,
@@ -99,7 +105,7 @@ const DoctorDashboard = () => {
                 timings: doctorData.timings
               });
             } else {
-              console.log('No doctor data found for ID:', doctorId);
+              console.log('No doctor data found for ID:', sessionDoctorId);
               setDoctorSpecialty('Medical Professional');
             }
           } else {
@@ -112,17 +118,26 @@ const DoctorDashboard = () => {
               const doctorsData = await response.json();
               
               if (doctorsData) {
-                const doctorRecord = Object.values(doctorsData).find(
-                  doctor => doctor.email === doctorEmail
+                const doctorEntries = Object.entries(doctorsData);
+                const doctorEntry = doctorEntries.find(
+                  ([key, doctor]) => doctor.email === doctorEmail
                 );
                 
-                if (doctorRecord) {
+                if (doctorEntry) {
+                  const [foundDoctorId, doctorRecord] = doctorEntry;
+                  console.log('Found doctor by email:', foundDoctorId, doctorRecord);
+                  
+                  // Set the found doctor ID
+                  setDoctorId(foundDoctorId);
                   setDoctorName(doctorRecord.name || sessionData.name || 'Doctor');
                   setDoctorSpecialty(doctorRecord.specialty || doctorRecord.specialization || 'Medical Professional');
+                  setDoctorTimings(doctorRecord.timings || {}); // Load existing timings
                 }
               }
             }
           }
+        } else {
+          console.log('No doctor session found');
         }
       } catch (error) {
         console.error('Error loading doctor data:', error);
@@ -169,12 +184,30 @@ const DoctorDashboard = () => {
   ];
 
   const saveSchedule = async () => {
-    if (!selectedDay || !doctorId) {
-      Alert.alert('Error', 'Please select a day and ensure you are logged in');
+    console.log('=== SAVE SCHEDULE DEBUG ===');
+    console.log('Selected day:', selectedDay);
+    console.log('Doctor ID:', doctorId);
+    console.log('Selected start time:', selectedStartTime);
+    console.log('Selected end time:', selectedEndTime);
+    
+    if (!selectedDay) {
+      console.log('ERROR: No day selected');
+      Alert.alert('Error', 'Please select a day');
+      return;
+    }
+    
+    if (!doctorId) {
+      console.log('ERROR: No doctor ID found');
+      Alert.alert('Error', 'Doctor not logged in properly. Please logout and login again.');
       return;
     }
 
     try {
+      console.log('Saving schedule for doctor:', doctorId);
+      console.log('Selected day:', selectedDay);
+      console.log('Start time:', selectedStartTime);
+      console.log('End time:', selectedEndTime);
+
       const timing = {
         day: selectedDay,
         startTime: selectedStartTime,
@@ -183,33 +216,48 @@ const DoctorDashboard = () => {
         createdAt: new Date().toISOString()
       };
 
-      // Update the local state
+      // Update the local state first
       const updatedTimings = {
         ...doctorTimings,
         [selectedDay]: timing
       };
-      setDoctorTimings(updatedTimings);
+      
+      console.log('Updated timings object:', updatedTimings);
 
-      // Save to Firebase
-      const response = await fetch(
-        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}/timings.json`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedTimings)
-        }
-      );
+      // Save to Firebase using PATCH to update only the timings field
+      const firebaseUrl = `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}.json`;
+      console.log('Firebase URL:', firebaseUrl);
+
+      const response = await fetch(firebaseUrl, {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ timings: updatedTimings })
+      });
+
+      console.log('Firebase response status:', response.status);
+      console.log('Firebase response ok:', response.ok);
 
       if (response.ok) {
+        const responseData = await response.json();
+        console.log('Firebase response data:', responseData);
+        
+        // Update local state after successful save
+        setDoctorTimings(updatedTimings);
+        
         Alert.alert('Success', `Schedule for ${selectedDay} has been ${editingSchedule ? 'updated' : 'saved'} successfully!`);
         setShowScheduleModal(false);
         resetScheduleForm();
       } else {
-        throw new Error('Failed to save schedule');
+        const errorText = await response.text();
+        console.error('Firebase error response:', errorText);
+        throw new Error(`Firebase error: ${response.status} - ${errorText}`);
       }
     } catch (error) {
       console.error('Error saving schedule:', error);
-      Alert.alert('Error', 'Failed to save schedule. Please try again.');
+      Alert.alert('Error', `Failed to save schedule: ${error.message}`);
     }
   };
 
@@ -231,28 +279,40 @@ const DoctorDashboard = () => {
 
   const deleteSchedule = async (day) => {
     try {
+      console.log('Deleting schedule for day:', day);
+      console.log('Doctor ID:', doctorId);
+
       const updatedTimings = { ...doctorTimings };
       delete updatedTimings[day];
-      setDoctorTimings(updatedTimings);
+      
+      console.log('Updated timings after deletion:', updatedTimings);
 
-      // Save to Firebase
-      const response = await fetch(
-        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}/timings.json`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedTimings)
-        }
-      );
+      // Save to Firebase using PATCH
+      const firebaseUrl = `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}.json`;
+      
+      const response = await fetch(firebaseUrl, {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ timings: updatedTimings })
+      });
+
+      console.log('Delete response status:', response.status);
 
       if (response.ok) {
+        // Update local state after successful deletion
+        setDoctorTimings(updatedTimings);
         Alert.alert('Success', `Schedule for ${day} has been deleted successfully!`);
       } else {
-        throw new Error('Failed to delete schedule');
+        const errorText = await response.text();
+        console.error('Firebase delete error:', errorText);
+        throw new Error(`Failed to delete schedule: ${response.status}`);
       }
     } catch (error) {
       console.error('Error deleting schedule:', error);
-      Alert.alert('Error', 'Failed to delete schedule. Please try again.');
+      Alert.alert('Error', `Failed to delete schedule: ${error.message}`);
     }
   };
 
@@ -314,23 +374,100 @@ const DoctorDashboard = () => {
     }
   }, [doctorId]);
 
+  // Generate 5-digit room ID with digits and capital letters
+  const generateRoomId = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let roomId = '';
+    for (let i = 0; i < 5; i++) {
+      roomId += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return roomId;
+  };
+
+  // Send meeting invite email
+  const sendMeetingInvite = async (patientEmail, doctorEmail, roomId) => {
+    try {
+      const response = await fetch('http://10.3.5.210:5008/send-meeting-invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          patient_email: patientEmail,
+          doctor_email: doctorEmail,
+          room_id: roomId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send meeting invite');
+      }
+
+      console.log('Meeting invite sent successfully');
+      return true;
+    } catch (error) {
+      console.error('Error sending meeting invite:', error);
+      return false;
+    }
+  };
+
   const handleAppointmentAction = async (appointmentId, action) => {
     try {
+      let roomId = null;
+      let emailSent = false;
+
+      // If approving appointment, generate room ID and send email
+      if (action === 'confirmed') {
+        roomId = generateRoomId();
+        
+        // Get appointment details for email
+        const appointment = appointments.find(app => app.id === appointmentId);
+        if (appointment) {
+          const patientEmail = appointment.patientEmail || appointment.userEmail;
+          const doctorSession = await AsyncStorage.getItem('doctorSession');
+          const sessionData = JSON.parse(doctorSession);
+          const doctorEmail = sessionData?.email;
+
+          if (patientEmail && doctorEmail) {
+            emailSent = await sendMeetingInvite(patientEmail, doctorEmail, roomId);
+          }
+        }
+      }
+
+      // Update appointment in Firebase
+      const updateData = {
+        status: action,
+        updatedAt: new Date().toISOString(),
+        updatedBy: doctorId
+      };
+
+      // Add room ID if appointment is approved
+      if (action === 'confirmed' && roomId) {
+        updateData.roomId = roomId;
+        updateData.meetingInviteSent = emailSent;
+      }
+
       const response = await fetch(
         `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments/${appointmentId}.json`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            status: action,
-            updatedAt: new Date().toISOString(),
-            updatedBy: doctorId
-          })
+          body: JSON.stringify(updateData)
         }
       );
 
       if (response.ok) {
-        Alert.alert('Success', `Appointment ${action} successfully!`);
+        let successMessage = `Appointment ${action} successfully!`;
+        if (action === 'confirmed') {
+          successMessage += `\nRoom ID: ${roomId}`;
+          if (emailSent) {
+            successMessage += '\nMeeting invite sent to patient email.';
+          } else {
+            successMessage += '\nWarning: Could not send meeting invite email.';
+          }
+        }
+        
+        Alert.alert('Success', successMessage);
         // Reload appointments data
         loadAppointmentsData();
       } else {
@@ -702,6 +839,13 @@ const DoctorDashboard = () => {
                         <Text style={styles.detailText}>{appointment.patientEmail || appointment.userEmail}</Text>
                       </View>
                       
+                      {appointment.roomId && (
+                        <View style={styles.detailItem}>
+                          <Ionicons name="videocam-outline" size={16} color="#4ECDC4" />
+                          <Text style={styles.detailText}>Room ID: {appointment.roomId}</Text>
+                        </View>
+                      )}
+                      
                       {appointment.notes && (
                         <View style={styles.notesSection}>
                           <View style={styles.detailItem}>
@@ -739,6 +883,12 @@ const DoctorDashboard = () => {
                         <Text style={styles.processedStatusText}>
                           {appointment.status === 'confirmed' ? '✓ Appointment Approved' : '✗ Appointment Rejected'}
                         </Text>
+                        {appointment.status === 'confirmed' && appointment.roomId && (
+                          <View style={styles.roomIdContainer}>
+                            <Ionicons name="videocam" size={16} color="#4ECDC4" />
+                            <Text style={styles.roomIdText}>Meeting Room: {appointment.roomId}</Text>
+                          </View>
+                        )}
                       </View>
                     )}
                   </View>
@@ -2027,6 +2177,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#4ECDC4',
     fontWeight: '600',
+  },
+  // Room ID Styles
+  roomIdContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4ECDC4',
+  },
+  roomIdText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginLeft: 6,
   },
   // Empty State Styles
   emptyState: {

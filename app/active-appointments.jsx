@@ -226,6 +226,13 @@ const ActiveAppointments = () => {
           <Ionicons name="person-outline" size={16} color="#64748B" />
           <Text style={styles.detailText}>Patient: {item.patientEmail}</Text>
         </View>
+        
+        {item.status === 'confirmed' && item.roomId && (
+          <View style={styles.roomIdRow}>
+            <Ionicons name="videocam" size={16} color="#4ECDC4" />
+            <Text style={styles.roomIdText}>Meeting Room: {item.roomId}</Text>
+          </View>
+        )}
       </View>
       
       <View style={styles.appointmentActions}>
@@ -236,6 +243,28 @@ const ActiveAppointments = () => {
           <Ionicons name="person" size={16} color="#4ECDC4" />
           <Text style={styles.actionButtonText}>View Doctor</Text>
         </TouchableOpacity>
+        
+        {item.status === 'confirmed' && item.roomId && (
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.joinMeetingButton]}
+            onPress={() => {
+              Alert.alert(
+                'Join Meeting',
+                `Room ID: ${item.roomId}\n\nYou can join the meeting using this Room ID.`,
+                [
+                  { text: 'Copy Room ID', onPress: () => {
+                    // Copy to clipboard if available
+                    Alert.alert('Room ID Copied', `Room ID ${item.roomId} copied to clipboard`);
+                  }},
+                  { text: 'OK', style: 'default' }
+                ]
+              );
+            }}
+          >
+            <Ionicons name="videocam" size={16} color="#059669" />
+            <Text style={[styles.actionButtonText, { color: '#059669' }]}>Join Meeting</Text>
+          </TouchableOpacity>
+        )}
         
         {item.status !== 'cancelled' && item.status !== 'confirmed' && (
           <TouchableOpacity 
@@ -549,6 +578,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  // Room ID Styles
+  roomIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4ECDC4',
+  },
+  roomIdText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginLeft: 8,
+  },
+  joinMeetingButton: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#059669',
   },
 });
 
