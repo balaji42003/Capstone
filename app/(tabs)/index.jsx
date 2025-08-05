@@ -421,11 +421,11 @@ const HomeScreen = () => {
     },
     { 
       id: '5', 
-      title: 'Test Video Call', 
+      title: 'Join Video Call', 
       icon: 'videocam', 
-      colors: ['#e53e3e', '#f56565'],
-      bgColor: '#FFF0F0',
-      route: '/video-call-test'
+      colors: ['#4ECDC4', '#44D8A8'],
+      bgColor: '#F0FFF8',
+      route: '/join-video-call'
     },
   ];
 

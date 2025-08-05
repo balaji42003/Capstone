@@ -248,21 +248,18 @@ const ActiveAppointments = () => {
           <TouchableOpacity 
             style={[styles.actionButton, styles.joinMeetingButton]}
             onPress={() => {
-              Alert.alert(
-                'Join Meeting',
-                `Room ID: ${item.roomId}\n\nYou can join the meeting using this Room ID.`,
-                [
-                  { text: 'Copy Room ID', onPress: () => {
-                    // Copy to clipboard if available
-                    Alert.alert('Room ID Copied', `Room ID ${item.roomId} copied to clipboard`);
-                  }},
-                  { text: 'OK', style: 'default' }
-                ]
-              );
+              router.push({
+                pathname: '/video-call-test',
+                params: {
+                  roomId: item.roomId,
+                  userName: item.patientName || item.userName || 'Patient',
+                  userId: `patient_${Date.now()}`
+                }
+              });
             }}
           >
             <Ionicons name="videocam" size={16} color="#059669" />
-            <Text style={[styles.actionButtonText, { color: '#059669' }]}>Join Meeting</Text>
+            <Text style={[styles.actionButtonText, { color: '#059669' }]}>Join Video Call</Text>
           </TouchableOpacity>
         )}
         

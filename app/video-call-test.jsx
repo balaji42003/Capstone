@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -18,15 +18,16 @@ try {
 
 export default function VideoCallTest() {
   const router = useRouter();
+  const { roomId, userName, userId } = useLocalSearchParams();
 
   // Your actual Zego credentials
-  const yourAppID = 1376271159;
-  const yourAppSign = "a1518288cbabc045c50352c15fe07734bec085a60d3f4a128d4e135cefb53d40";
+  const yourAppID = 274983986;
+  const yourAppSign = "90114740a4ffede9d226e67220839b9f7d7978326644b6ce2e9f0fafe1d1d699";
   
-  // Test data
-  const userID = "test_user_123";
-  const userName = "Test User";
-  const callID = "test_call_room";
+  // Use parameters or default test data
+  const callID = roomId || "test_call_room";
+  const displayName = userName || "Test User";
+  const userIdentifier = userId || "test_user_123";
 
   if (!isZegoAvailable) {
     return (
@@ -52,8 +53,8 @@ export default function VideoCallTest() {
       <ZegoUIKitPrebuiltCall
         appID={yourAppID}
         appSign={yourAppSign}
-        userID={userID}
-        userName={userName}
+        userID={userIdentifier}
+        userName={displayName}
         callID={callID}
         config={{
           ...ONE_ON_ONE_VIDEO_CALL_CONFIG,

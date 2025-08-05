@@ -3,19 +3,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 let LinearGradient;
@@ -884,9 +884,25 @@ const DoctorDashboard = () => {
                           {appointment.status === 'confirmed' ? '✓ Appointment Approved' : '✗ Appointment Rejected'}
                         </Text>
                         {appointment.status === 'confirmed' && appointment.roomId && (
-                          <View style={styles.roomIdContainer}>
-                            <Ionicons name="videocam" size={16} color="#4ECDC4" />
-                            <Text style={styles.roomIdText}>Meeting Room: {appointment.roomId}</Text>
+                          <View style={styles.roomIdWithAction}>
+                            <View style={styles.roomIdContainer}>
+                              <Ionicons name="videocam" size={16} color="#4ECDC4" />
+                              <Text style={styles.roomIdText}>Meeting Room: {appointment.roomId}</Text>
+                            </View>
+                            <TouchableOpacity 
+                              style={styles.joinCallButton}
+                              onPress={() => router.push({
+                                pathname: '/video-call-test',
+                                params: {
+                                  roomId: appointment.roomId,
+                                  userName: doctorName || 'Doctor',
+                                  userId: `doctor_${Date.now()}`
+                                }
+                              })}
+                            >
+                              <Ionicons name="videocam" size={16} color="white" />
+                              <Text style={styles.joinCallButtonText}>Join Video Call</Text>
+                            </TouchableOpacity>
                           </View>
                         )}
                       </View>
@@ -2195,6 +2211,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#059669',
     marginLeft: 6,
+  },
+  // Video Call Button Styles
+  roomIdWithAction: {
+    flexDirection: 'column',
+    gap: 8,
+    marginTop: 8,
+  },
+  joinCallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4ECDC4',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+    elevation: 2,
+    shadowColor: '#4ECDC4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  joinCallButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   // Empty State Styles
   emptyState: {
