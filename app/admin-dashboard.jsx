@@ -24,14 +24,16 @@ const AdminDashboard = () => {
   const [adminName, setAdminName] = useState('');
   const [adminPhoto, setAdminPhoto] = useState('');
   const [doctors, setDoctors] = useState([]);
+  const [allDoctors, setAllDoctors] = useState([]); // New: All doctors including approved
   const [verifiedDoctors, setVerifiedDoctors] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedCards, setExpandedCards] = useState({});
+  const [selectedTab, setSelectedTab] = useState('pending'); // New: For doctor management tabs
 
   const tabs = [
     { id: 'Dashboard', label: 'Dashboard', icon: 'grid-outline' },
-    { id: 'Doctors', label: 'Doctors', icon: 'people-outline' },
+    { id: 'Doctors', label: 'All Doctors', icon: 'people-outline' },
     { id: 'Analytics', label: 'Analytics', icon: 'analytics-outline' },
     { id: 'Settings', label: 'Settings', icon: 'settings-outline' },
   ];
@@ -39,6 +41,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     loadAdminData();
     loadDoctors();
+    loadAllDoctors(); // New: Load all doctors
     loadVerifiedDoctors();
   }, []);
 
@@ -77,6 +80,40 @@ const AdminDashboard = () => {
     }
   };
 
+  // New function to load all doctors
+  const loadAllDoctors = async () => {
+    try {
+      console.log('Loading all doctors...');
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
+      );
+      const data = await response.json();
+      
+      console.log('Raw Firebase data:', data);
+      
+      if (data) {
+        const allDoctorsList = Object.keys(data).map(key => ({
+          id: key,
+          ...data[key]
+        })).sort((a, b) => {
+          // Sort by registration date, newest first
+          return new Date(b.registrationDate || b.createdAt || 0) - new Date(a.registrationDate || a.createdAt || 0);
+        });
+        
+        console.log('Processed all doctors list:', allDoctorsList);
+        console.log('Number of doctors loaded:', allDoctorsList.length);
+        
+        setAllDoctors(allDoctorsList);
+      } else {
+        console.log('No doctor data received from Firebase');
+        setAllDoctors([]);
+      }
+    } catch (error) {
+      console.error('Error loading all doctors:', error);
+      Alert.alert('Error', 'Failed to load doctors data');
+    }
+  };
+
   const loadVerifiedDoctors = async () => {
     try {
       const response = await fetch(
@@ -99,6 +136,7 @@ const AdminDashboard = () => {
   const onRefresh = async () => {
     setRefreshing(true);
     await loadDoctors();
+    await loadAllDoctors(); // Refresh all doctors too
     await loadVerifiedDoctors();
     setRefreshing(false);
   };
@@ -122,11 +160,77 @@ const AdminDashboard = () => {
         )
       );
 
+      // Update all doctors list too
+      setAllDoctors(prev => 
+        prev.map(doctor => 
+          doctor.id === doctorId 
+            ? { ...doctor, verificationStatus: status }
+            : doctor
+        )
+      );
+
       Alert.alert('Success', `Doctor ${status} successfully!`);
     } catch (error) {
       console.error('Error updating doctor status:', error);
       Alert.alert('Error', 'Failed to update doctor status');
     }
+  };
+
+  // New function to delete doctor
+  const deleteDoctor = async (doctorId, doctorName) => {
+    Alert.alert(
+      'Delete Doctor',
+      `Are you sure you want to permanently delete Dr. ${doctorName}? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Delete from doctors database
+              await fetch(
+                `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors/${doctorId}.json`,
+                { method: 'DELETE' }
+              );
+
+              // Also try to delete from verification if exists
+              try {
+                const verificationResponse = await fetch(
+                  'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/verification.json'
+                );
+                const verificationData = await verificationResponse.json();
+                
+                if (verificationData) {
+                  const verificationEntry = Object.keys(verificationData).find(key => 
+                    verificationData[key].doctorId === doctorId
+                  );
+                  
+                  if (verificationEntry) {
+                    await fetch(
+                      `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/verification/${verificationEntry}.json`,
+                      { method: 'DELETE' }
+                    );
+                  }
+                }
+              } catch (verificationError) {
+                console.log('No verification record found or error deleting:', verificationError);
+              }
+
+              // Update local state
+              setDoctors(prev => prev.filter(doctor => doctor.id !== doctorId));
+              setAllDoctors(prev => prev.filter(doctor => doctor.id !== doctorId));
+              setVerifiedDoctors(prev => prev.filter(doctor => doctor.doctorId !== doctorId));
+
+              Alert.alert('Success', `Dr. ${doctorName} has been deleted successfully.`);
+            } catch (error) {
+              console.error('Error deleting doctor:', error);
+              Alert.alert('Error', 'Failed to delete doctor. Please try again.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const generateVerificationCode = () => {
@@ -271,6 +375,15 @@ const AdminDashboard = () => {
 
       // 5. Update local state to reflect the approval
       setDoctors(prev => 
+        prev.map(d => 
+          d.id === doctor.id 
+            ? { ...d, verificationStatus: 'approved', verificationCode: verificationCode }
+            : d
+        )
+      );
+
+      // Update allDoctors list too
+      setAllDoctors(prev => 
         prev.map(d => 
           d.id === doctor.id 
             ? { ...d, verificationStatus: 'approved', verificationCode: verificationCode }
@@ -443,7 +556,7 @@ const AdminDashboard = () => {
     );
   };
 
-  const renderDoctorCard = ({ item }) => {
+  const renderDoctorCard = ({ item, showActions = true }) => {
     const isExpanded = expandedCards[item.id] || false;
 
     const toggleExpanded = () => {
@@ -465,19 +578,32 @@ const AdminDashboard = () => {
               <Text style={styles.doctorDetail}>📧 {item.email}</Text>
               <Text style={styles.doctorDetail}>📞 {item.phone}</Text>
               <Text style={styles.doctorDetail}>🏥 {item.experience} years exp.</Text>
+              {/* LICENSE - ALWAYS VISIBLE NOW */}
+              <View style={styles.licenseContainer}>
+                <Text style={styles.licenseLabel}>🆔 Medical License:</Text>
+                <Text style={styles.licenseNumber}>{item.licenseNumber || item.license || 'Not provided'}</Text>
+              </View>
             </View>
 
             {/* Extended Details - Show More */}
             {isExpanded && (
               <View style={styles.extendedDetails}>
                 <Text style={styles.detailSeparator}>• • •</Text>
-                <Text style={styles.doctorDetail}>🆔 License: {item.licenseNumber}</Text>
-                <Text style={styles.doctorDetail}>🎓 Qualification: {item.qualification}</Text>
-                <Text style={styles.doctorDetail}>🏥 Hospital: {item.hospitalAffiliation}</Text>
-                <Text style={styles.doctorDetail}>📍 Address: {item.address}</Text>
-                <Text style={styles.doctorDetail}>💰 Consultation Fee: ₹{item.consultationFee}</Text>
+                <Text style={styles.doctorDetail}>🎓 Qualification: {item.qualification || 'Not provided'}</Text>
+                <Text style={styles.doctorDetail}>🏥 Hospital: {item.hospitalAffiliation || 'Not provided'}</Text>
+                <Text style={styles.doctorDetail}>📍 Address: {item.address || 'Not provided'}</Text>
+                <Text style={styles.doctorDetail}>💰 Consultation Fee: ₹{item.consultationFee || 'Not specified'}</Text>
                 {item.registrationDate && (
                   <Text style={styles.doctorDetail}>📅 Registered: {new Date(item.registrationDate).toLocaleDateString()}</Text>
+                )}
+                {item.approvedAt && (
+                  <Text style={styles.doctorDetail}>✅ Approved: {new Date(item.approvedAt).toLocaleDateString()}</Text>
+                )}
+                {item.verificationCode && (
+                  <View style={styles.codeContainer}>
+                    <Text style={styles.codeLabel}>🔑 Verification Code:</Text>
+                    <Text style={styles.codeValue}>{item.verificationCode}</Text>
+                  </View>
                 )}
               </View>
             )}
@@ -513,20 +639,58 @@ const AdminDashboard = () => {
           </View>
         </View>
 
-        {(item.verificationStatus || item.status) === 'pending' && (
+        {/* Action Buttons */}
+        {showActions && (
           <View style={styles.doctorActions}>
+            {/* Pending Status Actions */}
+            {((item.verificationStatus || item.status) === 'pending' || !(item.verificationStatus || item.status)) && (
+              <>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, styles.approveBtn]}
+                  onPress={() => approveDoctorAndCreateVerification(item)}
+                >
+                  <Ionicons name="checkmark" size={16} color="white" />
+                  <Text style={styles.actionBtnText}>Approve</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.actionBtn, styles.rejectBtn]}
+                  onPress={() => updateDoctorStatus(item.id, 'rejected')}
+                >
+                  <Ionicons name="close" size={16} color="white" />
+                  <Text style={styles.actionBtnText}>Reject</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Status Change Actions for Approved/Rejected */}
+            {(item.verificationStatus || item.status) === 'approved' && (
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.rejectBtn]}
+                onPress={() => updateDoctorStatus(item.id, 'rejected')}
+              >
+                <Ionicons name="close" size={16} color="white" />
+                <Text style={styles.actionBtnText}>Revoke Approval</Text>
+              </TouchableOpacity>
+            )}
+
+            {(item.verificationStatus || item.status) === 'rejected' && (
+              <TouchableOpacity 
+                style={[styles.actionBtn, styles.approveBtn]}
+                onPress={() => approveDoctorAndCreateVerification(item)}
+              >
+                <Ionicons name="checkmark" size={16} color="white" />
+                <Text style={styles.actionBtnText}>Approve</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Delete Button - Always Available */}
             <TouchableOpacity 
-              style={[styles.actionBtn, styles.approveBtn]}
-              onPress={() => approveDoctorAndCreateVerification(item)}
+              style={[styles.actionBtn, styles.deleteBtn]}
+              onPress={() => deleteDoctor(item.id, item.name)}
             >
-              <Text style={styles.actionBtnText}>Approve</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.actionBtn, styles.rejectBtn]}
-              onPress={() => updateDoctorStatus(item.id, 'rejected')}
-            >
-              <Text style={styles.actionBtnText}>Reject</Text>
+              <Ionicons name="trash" size={16} color="white" />
+              <Text style={styles.actionBtnText}>Delete</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -542,26 +706,26 @@ const AdminDashboard = () => {
         <View style={styles.statsGrid}>
           {[
             { 
-              title: 'Total Approved', 
-              value: verifiedDoctors.filter(d => d.status === 'approved').length.toString(), 
+              title: 'Total Doctors', 
+              value: allDoctors.length.toString(), 
               icon: 'people',
               color: '#3b82f6'
             },
             { 
-              title: 'Pending Requests', 
-              value: doctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending').length.toString(), 
-              icon: 'time',
-              color: '#f59e0b'
-            },
-            { 
-              title: 'Recently Approved', 
-              value: verifiedDoctors.filter(d => d.status === 'approved').length.toString(), 
+              title: 'Approved', 
+              value: allDoctors.filter(d => d.verificationStatus === 'approved').length.toString(), 
               icon: 'checkmark-circle',
               color: '#10b981'
             },
             { 
+              title: 'Pending', 
+              value: allDoctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending').length.toString(), 
+              icon: 'time',
+              color: '#f59e0b'
+            },
+            { 
               title: 'Rejected', 
-              value: doctors.filter(d => d.verificationStatus === 'rejected').length.toString(), 
+              value: allDoctors.filter(d => d.verificationStatus === 'rejected').length.toString(), 
               icon: 'close-circle',
               color: '#ef4444'
             },
@@ -582,8 +746,19 @@ const AdminDashboard = () => {
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
           {[
-            { title: 'Pending Requests', icon: 'people', color: '#8b5cf6', action: () => setActiveTab('Doctors') },
-            { title: 'View Analytics', icon: 'analytics', color: '#06b6d4', action: () => setActiveTab('Analytics') },
+            { title: 'All Doctors', icon: 'people', color: '#8b5cf6', action: () => { 
+                console.log('All Doctors button clicked');
+                loadAllDoctors(); // Force reload
+                setActiveTab('Doctors'); 
+                setSelectedTab('all'); 
+              } 
+            },
+            { title: 'Force Reload', icon: 'refresh-circle', color: '#dc2626', action: () => {
+                console.log('Force reload clicked');
+                loadAllDoctors();
+                Alert.alert('Reload', 'Attempting to reload all doctors data...');
+              }
+            },
             { title: 'Test Connectivity', icon: 'wifi', color: '#84cc16', action: testServerConnectivity },
             { title: 'Test Email', icon: 'mail', color: '#f97316', action: testEmailFunctionality },
           ].map((action, index) => (
@@ -605,44 +780,124 @@ const AdminDashboard = () => {
         </View>
         {doctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending').slice(0, 3).map((doctor) => (
           <View key={doctor.id}>
-            {renderDoctorCard({ item: doctor })}
+            {renderDoctorCard({ item: doctor, showActions: true })}
           </View>
         ))}
       </View>
     </ScrollView>
   );
 
-  const renderDoctors = () => (
-    <View style={styles.content}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Doctor Requests Management</Text>
-        <TouchableOpacity onPress={loadDoctors}>
-          <Ionicons name="refresh" size={20} color="#374151" />
-        </TouchableOpacity>
-      </View>
-      
-      {loadingDoctors ? (
-        <View style={styles.loading}>
-          <Text style={styles.loadingText}>Loading doctor requests...</Text>
+  const renderDoctors = () => {
+    console.log('Rendering doctors page, allDoctors state:', allDoctors);
+    console.log('Selected tab:', selectedTab);
+    
+    const getDoctorsByCategory = () => {
+      switch (selectedTab) {
+        case 'pending':
+          const pending = allDoctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending');
+          console.log('Pending doctors:', pending);
+          return pending;
+        case 'approved':
+          const approved = allDoctors.filter(d => d.verificationStatus === 'approved');
+          console.log('Approved doctors:', approved);
+          return approved;
+        case 'rejected':
+          const rejected = allDoctors.filter(d => d.verificationStatus === 'rejected');
+          console.log('Rejected doctors:', rejected);
+          return rejected;
+        case 'all':
+        default:
+          console.log('All doctors:', allDoctors);
+          return allDoctors;
+      }
+    };
+
+    const currentDoctors = getDoctorsByCategory();
+    console.log('Current doctors to display:', currentDoctors);
+
+    return (
+      <View style={styles.content}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Doctor Management</Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity 
+              onPress={() => {
+                console.log('Current doctors state:', { 
+                  doctors: doctors.length, 
+                  allDoctors: allDoctors.length, 
+                  verifiedDoctors: verifiedDoctors.length 
+                });
+                Alert.alert('Debug Info', `Doctors: ${doctors.length}\nAll Doctors: ${allDoctors.length}\nVerified: ${verifiedDoctors.length}`);
+              }}
+              style={{ padding: 5 }}
+            >
+              <Ionicons name="bug" size={18} color="#dc2626" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onRefresh}>
+              <Ionicons name="refresh" size={20} color="#374151" />
+            </TouchableOpacity>
+          </View>
         </View>
-      ) : (
-        <FlatList
-          data={doctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending')}
-          renderItem={renderDoctorCard}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListEmptyComponent={() => (
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={64} color="#9ca3af" />
-              <Text style={styles.emptyTitle}>No Pending Requests</Text>
-              <Text style={styles.emptyText}>All doctor registration requests have been processed</Text>
-            </View>
-          )}
-        />
-      )}
-    </View>
-  );
+
+        {/* Doctor Category Tabs */}
+        <View style={styles.tabsContainer}>
+          {[
+            { id: 'all', label: 'All', count: allDoctors.length },
+            { id: 'pending', label: 'Pending', count: allDoctors.filter(d => !d.verificationStatus || d.verificationStatus === 'pending').length },
+            { id: 'approved', label: 'Approved', count: allDoctors.filter(d => d.verificationStatus === 'approved').length },
+            { id: 'rejected', label: 'Rejected', count: allDoctors.filter(d => d.verificationStatus === 'rejected').length },
+          ].map((tab) => (
+            <TouchableOpacity
+              key={tab.id}
+              style={[styles.tabBtn, selectedTab === tab.id && styles.activeTabBtn]}
+              onPress={() => setSelectedTab(tab.id)}
+            >
+              <Text style={[styles.tabText, selectedTab === tab.id && styles.activeTabText]}>
+                {tab.label}
+              </Text>
+              <View style={[styles.countBadge, selectedTab === tab.id && styles.activeCountBadge]}>
+                <Text style={[styles.countText, selectedTab === tab.id && styles.activeCountText]}>
+                  {tab.count}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+        
+        {loadingDoctors ? (
+          <View style={styles.loading}>
+            <Text style={styles.loadingText}>Loading doctors...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={currentDoctors}
+            renderItem={({ item }) => renderDoctorCard({ item, showActions: true })}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyState}>
+                <Ionicons name="people-outline" size={64} color="#9ca3af" />
+                <Text style={styles.emptyTitle}>
+                  {selectedTab === 'pending' ? 'No Pending Requests' :
+                   selectedTab === 'approved' ? 'No Approved Doctors' :
+                   selectedTab === 'rejected' ? 'No Rejected Doctors' :
+                   'No Doctors Found'}
+                </Text>
+                <Text style={styles.emptyText}>
+                  {selectedTab === 'pending' ? 'All doctor registration requests have been processed' :
+                   selectedTab === 'approved' ? 'No doctors have been approved yet' :
+                   selectedTab === 'rejected' ? 'No doctors have been rejected' :
+                   'No doctors are registered in the system'}
+                </Text>
+              </View>
+            )}
+            contentContainerStyle={{ paddingBottom: 20 }}
+          />
+        )}
+      </View>
+    );
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -1006,10 +1261,105 @@ const styles = StyleSheet.create({
   rejectBtn: {
     backgroundColor: '#e53e3e',
   },
+  deleteBtn: {
+    backgroundColor: '#dc2626',
+  },
   actionBtnText: {
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  
+  // New styles for license display
+  licenseContainer: {
+    backgroundColor: '#f0f4ff',
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#667eea',
+  },
+  licenseLabel: {
+    fontSize: 12,
+    color: '#667eea',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  licenseNumber: {
+    fontSize: 14,
+    color: '#2d3748',
+    fontWeight: '700',
+  },
+  
+  // New styles for verification code
+  codeContainer: {
+    backgroundColor: '#f0fdf4',
+    padding: 8,
+    borderRadius: 6,
+    marginTop: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: '#16a34a',
+  },
+  codeLabel: {
+    fontSize: 12,
+    color: '#16a34a',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  codeValue: {
+    fontSize: 16,
+    color: '#2d3748',
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  
+  // New styles for tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 4,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 6,
+  },
+  activeTabBtn: {
+    backgroundColor: '#667eea',
+  },
+  tabText: {
+    fontSize: 13,
+    color: '#718096',
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: 'white',
+  },
+  countBadge: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeCountBadge: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  countText: {
+    fontSize: 11,
+    color: '#718096',
+    fontWeight: '700',
+  },
+  activeCountText: {
+    color: 'white',
   },
   loading: {
     flex: 1,
