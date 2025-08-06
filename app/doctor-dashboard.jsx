@@ -3,19 +3,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 let LinearGradient;
@@ -50,6 +50,7 @@ const DoctorDashboard = () => {
   const [appointments, setAppointments] = useState([]);
   const [patients, setPatients] = useState([]);
   const [appointmentStats, setAppointmentStats] = useState({ total: 0, confirmed: 0, pending: 0 });
+  const [processingAppointment, setProcessingAppointment] = useState(null); // Add this state
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -154,6 +155,38 @@ const DoctorDashboard = () => {
   useEffect(() => {
     if (doctorId) {
       loadAppointmentsData();
+      
+      // Set up daily cleanup at 11:57 PM
+      const setupDailyCleanup = () => {
+        const now = new Date();
+        const tonight = new Date();
+        tonight.setHours(23, 57, 0, 0); // 11:57 PM
+        
+        // If it's already past 11:57 PM today, schedule for tomorrow
+        if (now > tonight) {
+          tonight.setDate(tonight.getDate() + 1);
+        }
+        
+        const timeUntilCleanup = tonight.getTime() - now.getTime();
+        
+        setTimeout(() => {
+          cleanupExpiredAppointments();
+          
+          // Set up recurring daily cleanup
+          const dailyInterval = setInterval(() => {
+            cleanupExpiredAppointments();
+          }, 24 * 60 * 60 * 1000); // Every 24 hours
+          
+          return () => clearInterval(dailyInterval);
+        }, timeUntilCleanup);
+      };
+
+      setupDailyCleanup();
+
+      // Run cleanup once on startup (optional)
+      setTimeout(() => {
+        cleanupExpiredAppointments();
+      }, 2000);
     }
   }, [doctorId, loadAppointmentsData]);
 
@@ -327,9 +360,49 @@ const DoctorDashboard = () => {
     );
   };
 
-  const loadAppointmentsData = useCallback(async () => {
-    if (!doctorId) return;
+  // Check if video call should be enabled (10 minutes before appointment time)
+  const isVideoCallEnabled = (appointment) => {
+    if (appointment.status !== 'confirmed' || !appointment.roomId) return false;
     
+    const now = new Date();
+    const appointmentDate = new Date(appointment.selectedDate);
+    const [hours, minutes] = appointment.selectedTime.split(':');
+    appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    // Enable video call 10 minutes before appointment time
+    const enableTime = new Date(appointmentDate.getTime() - 10 * 60 * 1000);
+    
+    // Check if it's the same day and within the time range
+    const isSameDay = now.toDateString() === appointmentDate.toDateString();
+    const isWithinTimeRange = now >= enableTime && now <= appointmentDate;
+    
+    return isSameDay && (isWithinTimeRange || now <= appointmentDate);
+  };
+
+  // Get time remaining until video call is enabled
+  const getTimeUntilEnabled = (appointment) => {
+    const now = new Date();
+    const appointmentDate = new Date(appointment.selectedDate);
+    const [hours, minutes] = appointment.selectedTime.split(':');
+    appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    const enableTime = new Date(appointmentDate.getTime() - 10 * 60 * 1000);
+    const timeDiff = enableTime.getTime() - now.getTime();
+    
+    if (timeDiff <= 0) return null;
+    
+    const hoursRemaining = Math.floor(timeDiff / (1000 * 60 * 60));
+    const minutesRemaining = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hoursRemaining > 0) {
+      return `Available in ${hoursRemaining}h ${minutesRemaining}m`;
+    } else {
+      return `Available in ${minutesRemaining}m`;
+    }
+  };
+
+  // Auto-delete appointments after the day ends
+  const cleanupExpiredAppointments = async () => {
     try {
       const response = await fetch(
         'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments.json'
@@ -337,11 +410,63 @@ const DoctorDashboard = () => {
       const data = await response.json();
       
       if (data) {
+        const now = new Date();
+        const appointmentsToDelete = Object.entries(data)
+          .filter(([key, appointment]) => {
+            const appointmentDate = new Date(appointment.selectedDate);
+            // Delete if appointment date is before today
+            return appointmentDate.toDateString() < now.toDateString();
+          });
+
+        for (const [appointmentId] of appointmentsToDelete) {
+          await fetch(
+            `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments/${appointmentId}.json`,
+            { method: 'DELETE' }
+          );
+        }
+
+        if (appointmentsToDelete.length > 0) {
+          console.log(`[${new Date().toLocaleString()}] Cleaned up ${appointmentsToDelete.length} expired appointments`);
+          loadAppointmentsData(); // Reload to reflect changes
+        }
+      }
+    } catch (error) {
+      console.error('Error cleaning up expired appointments:', error);
+    }
+  };
+
+  const loadAppointmentsData = useCallback(async () => {
+    if (!doctorId) {
+      console.log('No doctor ID available, skipping appointment load');
+      return;
+    }
+    
+    try {
+      console.log('Loading appointments for doctor:', doctorId);
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments.json'
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Fetched appointments data:', data ? Object.keys(data).length : 0, 'appointments');
+      
+      if (data) {
         // Filter appointments for this doctor
         const doctorAppointments = Object.entries(data)
-          .filter(([key, appointment]) => appointment.doctorId === doctorId)
+          .filter(([key, appointment]) => {
+            const match = appointment.doctorId === doctorId;
+            if (!match) {
+              console.log('Appointment', key, 'doctor ID', appointment.doctorId, 'does not match', doctorId);
+            }
+            return match;
+          })
           .map(([key, appointment]) => ({ id: key, ...appointment }));
         
+        console.log('Found', doctorAppointments.length, 'appointments for doctor');
         setAppointments(doctorAppointments);
         
         // Calculate stats
@@ -350,6 +475,7 @@ const DoctorDashboard = () => {
           confirmed: doctorAppointments.filter(app => app.status === 'confirmed').length,
           pending: doctorAppointments.filter(app => app.status === 'pending').length
         };
+        console.log('Appointment stats:', stats);
         setAppointmentStats(stats);
         
         // Extract unique patients
@@ -367,10 +493,17 @@ const DoctorDashboard = () => {
           return acc;
         }, []);
         
+        console.log('Unique patients:', uniquePatients.length);
         setPatients(uniquePatients);
+      } else {
+        console.log('No appointments data found');
+        setAppointments([]);
+        setAppointmentStats({ total: 0, confirmed: 0, pending: 0 });
+        setPatients([]);
       }
     } catch (error) {
       console.error('Error loading appointments data:', error);
+      Alert.alert('Error', 'Failed to load appointments. Please check your internet connection and try again.');
     }
   }, [doctorId]);
 
@@ -381,12 +514,18 @@ const DoctorDashboard = () => {
     for (let i = 0; i < 5; i++) {
       roomId += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return roomId;
+    // Add timestamp suffix to ensure uniqueness
+    const timestamp = Date.now().toString().slice(-3);
+    return roomId + timestamp.slice(-1); // Make it 6 characters total
   };
 
   // Send meeting invite email
   const sendMeetingInvite = async (patientEmail, doctorEmail, roomId) => {
     try {
+      console.log('Sending meeting invite to:', patientEmail);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch('http://10.3.5.210:5008/send-meeting-invite', {
         method: 'POST',
         headers: {
@@ -396,87 +535,173 @@ const DoctorDashboard = () => {
           patient_email: patientEmail,
           doctor_email: doctorEmail,
           room_id: roomId
-        })
+        }),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error('Failed to send meeting invite');
+        throw new Error(`Email service error: ${response.status}`);
       }
 
       console.log('Meeting invite sent successfully');
       return true;
     } catch (error) {
-      console.error('Error sending meeting invite:', error);
+      if (error.name === 'AbortError') {
+        console.error('Email request timed out');
+      } else {
+        console.error('Error sending meeting invite:', error);
+      }
       return false;
     }
   };
 
   const handleAppointmentAction = async (appointmentId, action) => {
-    try {
-      let roomId = null;
-      let emailSent = false;
+    console.log('=== APPOINTMENT ACTION DEBUG ===');
+    console.log('Appointment ID:', appointmentId);
+    console.log('Action:', action);
+    console.log('Doctor ID:', doctorId);
 
-      // If approving appointment, generate room ID and send email
-      if (action === 'confirmed') {
-        roomId = generateRoomId();
-        
-        // Get appointment details for email
-        const appointment = appointments.find(app => app.id === appointmentId);
-        if (appointment) {
-          const patientEmail = appointment.patientEmail || appointment.userEmail;
-          const doctorSession = await AsyncStorage.getItem('doctorSession');
-          const sessionData = JSON.parse(doctorSession);
-          const doctorEmail = sessionData?.email;
-
-          if (patientEmail && doctorEmail) {
-            emailSent = await sendMeetingInvite(patientEmail, doctorEmail, roomId);
-          }
-        }
-      }
-
-      // Update appointment in Firebase
-      const updateData = {
-        status: action,
-        updatedAt: new Date().toISOString(),
-        updatedBy: doctorId
-      };
-
-      // Add room ID if appointment is approved
-      if (action === 'confirmed' && roomId) {
-        updateData.roomId = roomId;
-        updateData.meetingInviteSent = emailSent;
-      }
-
-      const response = await fetch(
-        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments/${appointmentId}.json`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updateData)
-        }
-      );
-
-      if (response.ok) {
-        let successMessage = `Appointment ${action} successfully!`;
-        if (action === 'confirmed') {
-          successMessage += `\nRoom ID: ${roomId}`;
-          if (emailSent) {
-            successMessage += '\nMeeting invite sent to patient email.';
-          } else {
-            successMessage += '\nWarning: Could not send meeting invite email.';
-          }
-        }
-        
-        Alert.alert('Success', successMessage);
-        // Reload appointments data
-        loadAppointmentsData();
-      } else {
-        throw new Error(`Failed to ${action} appointment`);
-      }
-    } catch (error) {
-      console.error(`Error ${action} appointment:`, error);
-      Alert.alert('Error', `Failed to ${action} appointment. Please try again.`);
+    if (!appointmentId) {
+      console.error('ERROR: No appointment ID provided');
+      Alert.alert('Error', 'Invalid appointment ID');
+      return;
     }
+
+    // Prevent multiple simultaneous processing
+    if (processingAppointment === appointmentId) {
+      console.log('Already processing this appointment, ignoring duplicate call');
+      return;
+    }
+
+    // Show immediate confirmation dialog
+    Alert.alert(
+      action === 'confirmed' ? 'Approve Appointment' : 'Reject Appointment',
+      action === 'confirmed' 
+        ? 'Are you sure you want to approve this appointment? A room ID will be generated and email will be sent to patient.'
+        : 'Are you sure you want to reject this appointment?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: action === 'confirmed' ? 'Approve' : 'Reject',
+          style: action === 'confirmed' ? 'default' : 'destructive',
+          onPress: async () => {
+            // Set processing state to prevent duplicate calls
+            setProcessingAppointment(appointmentId);
+            
+            try {
+              let roomId = null;
+              let emailSent = false;
+
+              // If approving appointment, generate room ID and send email
+              if (action === 'confirmed') {
+                console.log('Generating room ID...');
+                roomId = generateRoomId();
+                console.log('Generated Room ID:', roomId);
+                
+                // Get appointment details for email
+                const appointment = appointments.find(app => app.id === appointmentId);
+                console.log('Found appointment:', appointment);
+                
+                if (appointment) {
+                  const patientEmail = appointment.patientEmail || appointment.userEmail;
+                  
+                  // Get doctor email from AsyncStorage
+                  try {
+                    console.log('Getting doctor session...');
+                    const doctorSession = await AsyncStorage.getItem('doctorSession');
+                    const sessionData = doctorSession ? JSON.parse(doctorSession) : null;
+                    const doctorEmail = sessionData?.email;
+
+                    console.log('Email details:', { patientEmail, doctorEmail });
+
+                    if (patientEmail && doctorEmail) {
+                      console.log('Sending meeting invite...');
+                      emailSent = await sendMeetingInvite(patientEmail, doctorEmail, roomId);
+                      console.log('Email sent status:', emailSent);
+                    } else {
+                      console.log('Missing email addresses:', { patientEmail, doctorEmail });
+                    }
+                  } catch (sessionError) {
+                    console.error('Error getting doctor session:', sessionError);
+                  }
+                } else {
+                  console.error('Appointment not found in local state');
+                }
+              }
+
+              // Update appointment in Firebase
+              const updateData = {
+                status: action,
+                updatedAt: new Date().toISOString(),
+                updatedBy: doctorId || 'unknown'
+              };
+
+              // Add room ID if appointment is approved
+              if (action === 'confirmed' && roomId) {
+                updateData.roomId = roomId;
+                updateData.meetingInviteSent = emailSent;
+              }
+
+              console.log('Update data:', updateData);
+
+              const firebaseUrl = `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments/${appointmentId}.json`;
+              console.log('Firebase URL:', firebaseUrl);
+
+              const response = await fetch(firebaseUrl, {
+                method: 'PATCH',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                body: JSON.stringify(updateData)
+              });
+
+              console.log('Firebase response status:', response.status);
+              console.log('Firebase response ok:', response.ok);
+
+              if (response.ok) {
+                const responseData = await response.json();
+                console.log('Firebase response data:', responseData);
+
+                // Reload appointments data first
+                console.log('Reloading appointments...');
+                await loadAppointmentsData();
+
+                let successMessage = `Appointment ${action === 'confirmed' ? 'approved' : 'rejected'} successfully!`;
+                if (action === 'confirmed' && roomId) {
+                  successMessage += `\n\nRoom ID: ${roomId}`;
+                  if (emailSent) {
+                    successMessage += '\n✅ Meeting invite sent to patient email.';
+                  } else {
+                    successMessage += '\n⚠️ Could not send meeting invite email.';
+                  }
+                }
+                
+                // Clear processing state before showing success
+                setProcessingAppointment(null);
+                
+                // Show success alert
+                Alert.alert('Success', successMessage);
+                
+              } else {
+                const errorText = await response.text();
+                console.error('Firebase error response:', errorText);
+                throw new Error(`Firebase error: ${response.status} - ${errorText}`);
+              }
+            } catch (error) {
+              console.error(`Error ${action} appointment:`, error);
+              setProcessingAppointment(null); // Clear processing state on error
+              Alert.alert('Error', `Failed to ${action === 'confirmed' ? 'approve' : 'reject'} appointment: ${error.message}`);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleQuickActionPress = (action) => {
@@ -867,18 +1092,30 @@ const DoctorDashboard = () => {
                     {appointment.status === 'pending' && (
                       <View style={styles.actionButtonsRow}>
                         <TouchableOpacity 
-                          style={styles.rejectButton}
+                          style={[
+                            styles.rejectButton,
+                            processingAppointment === appointment.id && styles.disabledButton
+                          ]}
                           onPress={() => handleAppointmentAction(appointment.id, 'rejected')}
+                          disabled={processingAppointment === appointment.id}
                         >
                           <Ionicons name="close" size={16} color="white" />
-                          <Text style={styles.rejectButtonText}>Reject</Text>
+                          <Text style={styles.rejectButtonText}>
+                            {processingAppointment === appointment.id ? 'Processing...' : 'Reject'}
+                          </Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
-                          style={styles.approveButton}
+                          style={[
+                            styles.approveButton,
+                            processingAppointment === appointment.id && styles.disabledButton
+                          ]}
                           onPress={() => handleAppointmentAction(appointment.id, 'confirmed')}
+                          disabled={processingAppointment === appointment.id}
                         >
                           <Ionicons name="checkmark" size={16} color="white" />
-                          <Text style={styles.approveButtonText}>Approve</Text>
+                          <Text style={styles.approveButtonText}>
+                            {processingAppointment === appointment.id ? 'Processing...' : 'Approve'}
+                          </Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -897,14 +1134,38 @@ const DoctorDashboard = () => {
                             </View>
                             <TouchableOpacity 
                               style={styles.joinCallButton}
-                              onPress={() => router.push({
-                                pathname: '/video-call-test',
-                                params: {
-                                  roomId: appointment.roomId,
-                                  userName: doctorName || 'Doctor',
-                                  userId: `doctor_${Date.now()}`
+                              onPress={() => {
+                                // Check video call availability only when button is clicked
+                                const callEnabled = isVideoCallEnabled(appointment);
+                                
+                                if (callEnabled) {
+                                  // Join the call
+                                  router.push({
+                                    pathname: '/video-call-test',
+                                    params: {
+                                      roomId: appointment.roomId,
+                                      userName: doctorName || 'Doctor',
+                                      userId: `doctor_${Date.now()}`
+                                    }
+                                  });
+                                } else {
+                                  // Show availability message
+                                  const timeUntilEnabled = getTimeUntilEnabled(appointment);
+                                  if (timeUntilEnabled) {
+                                    Alert.alert(
+                                      'Video Call Not Available', 
+                                      `The video call will be available ${timeUntilEnabled.toLowerCase()}.\n\nPlease wait until 10 minutes before the appointment time.`,
+                                      [{ text: 'OK' }]
+                                    );
+                                  } else {
+                                    Alert.alert(
+                                      'Video Call Unavailable', 
+                                      'This video call is no longer available.',
+                                      [{ text: 'OK' }]
+                                    );
+                                  }
                                 }
-                              })}
+                              }}
                             >
                               <Ionicons name="videocam" size={16} color="white" />
                               <Text style={styles.joinCallButtonText}>Join Video Call</Text>
@@ -2114,6 +2375,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  disabledButton: {
+    opacity: 0.6,
+    backgroundColor: '#94a3b8',
+  },
   processedStatus: {
     paddingVertical: 12,
     alignItems: 'center',
@@ -2243,6 +2508,23 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  disabledCallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  disabledCallButtonText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '500',
   },
   // Empty State Styles
   emptyState: {

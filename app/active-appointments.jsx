@@ -56,6 +56,39 @@ const ActiveAppointments = () => {
   useEffect(() => {
     loadUserData();
     loadAppointments();
+    
+    // Set up daily cleanup at 11:57 PM
+    const setupDailyCleanup = () => {
+      const now = new Date();
+      const tonight = new Date();
+      tonight.setHours(23, 57, 0, 0); // 11:57 PM
+      
+      // If it's already past 11:57 PM today, schedule for tomorrow
+      if (now > tonight) {
+        tonight.setDate(tonight.getDate() + 1);
+      }
+      
+      const timeUntilCleanup = tonight.getTime() - now.getTime();
+      
+      setTimeout(() => {
+        cleanupExpiredAppointments();
+        
+        // Set up recurring daily cleanup
+        const dailyInterval = setInterval(() => {
+          cleanupExpiredAppointments();
+        }, 24 * 60 * 60 * 1000); // Every 24 hours
+        
+        return () => clearInterval(dailyInterval);
+      }, timeUntilCleanup);
+    };
+
+    setupDailyCleanup();
+
+    // Run cleanup once on startup (optional)
+    setTimeout(() => {
+      cleanupExpiredAppointments();
+    }, 2000);
+
   }, []);
 
   const loadUserData = async () => {
@@ -185,6 +218,124 @@ const ActiveAppointments = () => {
     });
   };
 
+  // Check if video call should be enabled (10 minutes before appointment time)
+  const isVideoCallEnabled = (appointment) => {
+    if (appointment.status !== 'confirmed' || !appointment.roomId) {
+      console.log('Call disabled: status or roomId missing', { 
+        status: appointment.status, 
+        roomId: appointment.roomId 
+      });
+      return false;
+    }
+    
+    const now = new Date();
+    const appointmentDate = new Date(appointment.selectedDate);
+    
+    // Parse time more carefully
+    const timeStr = appointment.selectedTime;
+    if (!timeStr || !timeStr.includes(':')) {
+      console.log('Invalid time format:', timeStr);
+      return false;
+    }
+    
+    const [hoursStr, minutesStr] = timeStr.split(':');
+    const hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr, 10);
+    
+    if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      console.log('Invalid time values:', { hours, minutes });
+      return false;
+    }
+    
+    appointmentDate.setHours(hours, minutes, 0, 0);
+    
+    // Enable video call 10 minutes before appointment time
+    const enableTime = new Date(appointmentDate.getTime() - 10 * 60 * 1000);
+    
+    // Check if it's the same day
+    const isSameDay = now.toDateString() === appointmentDate.toDateString();
+    
+    // Check if current time is within the allowed window (10 minutes before to appointment end time)
+    const isAfterEnableTime = now >= enableTime;
+    const isBeforeAppointmentEnd = now <= appointmentDate;
+    
+    console.log('Video call check:', {
+      appointmentId: appointment.id,
+      now: now.toLocaleString(),
+      appointmentDate: appointmentDate.toLocaleString(),
+      enableTime: enableTime.toLocaleString(),
+      isSameDay,
+      isAfterEnableTime,
+      isBeforeAppointmentEnd,
+      finalResult: isSameDay && isAfterEnableTime && isBeforeAppointmentEnd
+    });
+    
+    return isSameDay && isAfterEnableTime && isBeforeAppointmentEnd;
+  };
+
+  // Get time remaining until video call is enabled
+  const getTimeUntilEnabled = (appointment) => {
+    const now = new Date();
+    const appointmentDate = new Date(appointment.selectedDate);
+    
+    // Parse time more carefully
+    const timeStr = appointment.selectedTime;
+    if (!timeStr || !timeStr.includes(':')) {
+      return null;
+    }
+    
+    const [hoursStr, minutesStr] = timeStr.split(':');
+    const hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr, 10);
+    
+    if (isNaN(hours) || isNaN(minutes)) {
+      return null;
+    }
+    
+    appointmentDate.setHours(hours, minutes, 0, 0);
+    
+    const enableTime = new Date(appointmentDate.getTime() - 10 * 60 * 1000);
+    const timeDiff = enableTime.getTime() - now.getTime();
+    
+    // If time has passed, return null
+    if (timeDiff <= 0) return null;
+    
+    const hoursRemaining = Math.floor(timeDiff / (1000 * 60 * 60));
+    const minutesRemaining = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hoursRemaining > 0) {
+      return `Available in ${hoursRemaining}h ${minutesRemaining}m`;
+    } else {
+      return `Available in ${minutesRemaining}m`;
+    }
+  };
+
+  // Auto-delete appointments after the day ends
+  const cleanupExpiredAppointments = async () => {
+    try {
+      const now = new Date();
+      const appointmentsToDelete = appointments.filter(appointment => {
+        const appointmentDate = new Date(appointment.selectedDate);
+        // Delete if appointment date is before today
+        return appointmentDate.toDateString() < now.toDateString();
+      });
+
+      for (const appointment of appointmentsToDelete) {
+        await fetch(
+          `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/appointments/${appointment.id}.json`,
+          { method: 'DELETE' }
+        );
+      }
+
+      if (appointmentsToDelete.length > 0) {
+        console.log(`[${new Date().toLocaleString()}] Cleaned up ${appointmentsToDelete.length} expired appointments`);
+        loadAppointments(); // Reload to reflect changes
+      }
+    } catch (error) {
+      console.error('Error cleaning up expired appointments:', error);
+    }
+  };
+
   const renderAppointmentCard = ({ item }) => (
     <View style={styles.appointmentCard}>
       <View style={styles.appointmentHeader}>
@@ -252,14 +403,63 @@ const ActiveAppointments = () => {
           <TouchableOpacity 
             style={[styles.actionButton, styles.joinMeetingButton]}
             onPress={() => {
-              router.push({
-                pathname: '/video-call-test',
-                params: {
-                  roomId: item.roomId,
-                  userName: item.patientName || item.userName || 'Patient',
-                  userId: `patient_${Date.now()}`
-                }
+              console.log('Join button clicked for appointment:', {
+                id: item.id,
+                selectedDate: item.selectedDate,
+                selectedTime: item.selectedTime,
+                roomId: item.roomId,
+                status: item.status
               });
+              
+              // Check video call availability only when button is clicked
+              const callEnabled = isVideoCallEnabled(item);
+              
+              console.log('Call enabled result:', callEnabled);
+              
+              if (callEnabled) {
+                console.log('Joining video call with room ID:', item.roomId);
+                // Join the call
+                router.push({
+                  pathname: '/video-call-test',
+                  params: {
+                    roomId: item.roomId,
+                    userName: item.patientName || item.userName || 'Patient',
+                    userId: `patient_${Date.now()}`
+                  }
+                });
+              } else {
+                // Show availability message
+                const timeUntilEnabled = getTimeUntilEnabled(item);
+                console.log('Time until enabled:', timeUntilEnabled);
+                
+                if (timeUntilEnabled) {
+                  Alert.alert(
+                    'Video Call Not Available Yet', 
+                    `The video call will be available ${timeUntilEnabled.toLowerCase()}.\n\nVideo calls are enabled 10 minutes before your appointment time.\n\nAppointment: ${item.selectedDate} at ${item.selectedTime}`,
+                    [{ text: 'OK' }]
+                  );
+                } else {
+                  // Check if appointment time has passed
+                  const now = new Date();
+                  const appointmentDate = new Date(item.selectedDate);
+                  const [hours, minutes] = item.selectedTime.split(':');
+                  appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                  
+                  if (now > appointmentDate) {
+                    Alert.alert(
+                      'Appointment Time Passed', 
+                      'This appointment time has already passed. Please contact the doctor if you need assistance.',
+                      [{ text: 'OK' }]
+                    );
+                  } else {
+                    Alert.alert(
+                      'Video Call Unavailable', 
+                      'There seems to be an issue with the video call setup. Please try again or contact support.',
+                      [{ text: 'OK' }]
+                    );
+                  }
+                }
+              }
             }}
           >
             <Ionicons name="videocam" size={16} color="#059669" />
@@ -602,6 +802,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0fdf4',
     borderWidth: 1,
     borderColor: '#059669',
+  },
+  disabledMeetingButton: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
 });
 
