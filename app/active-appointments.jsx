@@ -3,17 +3,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Platform,
-    RefreshControl,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 // Conditional import for LinearGradient with fallback
@@ -201,7 +201,11 @@ const ActiveAppointments = () => {
           <Text style={styles.doctorName}>{item.doctorName}</Text>
           <Text style={styles.doctorSpecialty}>{item.doctorSpecialty}</Text>
           <Text style={styles.appointmentTime}>
-            {item.selectedDay} • {item.selectedTime}
+            {item.selectedDate && item.selectedDay 
+              ? `${item.selectedDate} (${item.selectedDay}) • ${item.selectedTime}`
+              : item.selectedDate 
+              ? `${item.selectedDate} • ${item.selectedTime}` 
+              : `${item.selectedDay} • ${item.selectedTime}`}
           </Text>
         </View>
         

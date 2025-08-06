@@ -822,7 +822,13 @@ const DoctorDashboard = () => {
                           <Ionicons name="calendar" size={18} color="#4ECDC4" />
                           <View style={styles.dateTimeInfo}>
                             <Text style={styles.dateTimeLabel}>Date</Text>
-                            <Text style={styles.dateTimeValue}>{appointment.selectedDay}</Text>
+                            <Text style={styles.dateTimeValue}>
+                              {appointment.selectedDate && appointment.selectedDay 
+                                ? `${appointment.selectedDate} (${appointment.selectedDay})`
+                                : appointment.selectedDate 
+                                ? appointment.selectedDate 
+                                : appointment.selectedDay}
+                            </Text>
                           </View>
                         </View>
                         <View style={styles.dateTimeCard}>

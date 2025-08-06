@@ -3,18 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 // Conditional import for LinearGradient with fallback
@@ -40,6 +40,8 @@ const DoctorProfile = () => {
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [availableDates, setAvailableDates] = useState({});
   const [bookingLoading, setBookingLoading] = useState(false);
 
   // Generate colors based on doctor ID
@@ -56,6 +58,53 @@ const DoctorProfile = () => {
     ];
     const index = (id?.length || 0) % colorSets.length;
     return colorSets[index];
+  };
+
+  // Get available dates for a selected day
+  const getAvailableDatesForDay = (dayName) => {
+    const dates = [];
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    // Create a proper comparison date (start of today)
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    // Map day names to numbers (0 = Sunday, 1 = Monday, etc.)
+    const dayMap = {
+      'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
+      'Thursday': 4, 'Friday': 5, 'Saturday': 6
+    };
+    
+    const targetDay = dayMap[dayName];
+    if (targetDay === undefined) return [];
+    
+    // Find all dates in current month that match the selected day
+    for (let date = 1; date <= 31; date++) {
+      const testDate = new Date(currentYear, currentMonth, date);
+      
+      // Stop if we've gone to next month
+      if (testDate.getMonth() !== currentMonth) break;
+      
+      // Check if this date matches our target day and is not in the past
+      if (testDate.getDay() === targetDay && testDate >= todayStart) {
+        // Format date without timezone conversion issues
+        const year = testDate.getFullYear();
+        const month = String(testDate.getMonth() + 1).padStart(2, '0');
+        const day = String(testDate.getDate()).padStart(2, '0');
+        const localDateString = `${year}-${month}-${day}`;
+        
+        dates.push({
+          date: localDateString, // Format: YYYY-MM-DD (local timezone)
+          displayDate: testDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }) // Format: "Aug 11"
+        });
+      }
+    }
+    
+    return dates;
   };
 
   useEffect(() => {
@@ -150,8 +199,8 @@ const DoctorProfile = () => {
   };
 
   const confirmBooking = async () => {
-    if (!selectedDay || !selectedTime) {
-      Alert.alert('Error', 'Please select both day and time for your appointment.');
+    if (!selectedDay || !selectedTime || !selectedDate) {
+      Alert.alert('Error', 'Please select day, date and time for your appointment.');
       return;
     }
 
@@ -175,10 +224,11 @@ const DoctorProfile = () => {
         doctorSpecialty: doctor.specialty || doctor.specialization || 'General Medicine',
         patientEmail: patientEmail,
         selectedDay: selectedDay,
+        selectedDate: selectedDate, // Include specific date
         selectedTime: selectedTime,
         status: 'pending',
         bookedAt: new Date().toISOString(),
-        appointmentDate: selectedDay
+        appointmentDate: selectedDate // Use specific date instead of day
       };
 
       // Save to Firebase
@@ -194,15 +244,21 @@ const DoctorProfile = () => {
       );
 
       if (response.ok) {
+        // Get the selected date display format
+        const dateObj = availableDates[selectedDay]?.find(d => d.date === selectedDate);
+        const displayDate = dateObj ? dateObj.displayDate : selectedDate;
+        
         Alert.alert(
           'Success!', 
-          `Appointment booked successfully!\n\nDoctor: ${doctor.name}\nDay: ${selectedDay}\nTime: ${selectedTime}\n\nYou will receive a confirmation shortly.`
+          `Appointment booked successfully!\n\nDoctor: ${doctor.name}\nDate: ${displayDate}\nTime: ${selectedTime}\n\nYou will receive a confirmation shortly.`
         );
         
         // Reset modal state
         setShowBookingModal(false);
         setSelectedDay('');
+        setSelectedDate('');
         setSelectedTime('');
+        setAvailableDates({});
       } else {
         throw new Error('Failed to book appointment');
       }
@@ -483,6 +539,7 @@ const DoctorProfile = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Fixed Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Book Appointment</Text>
               <TouchableOpacity 
@@ -493,21 +550,28 @@ const DoctorProfile = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalBody}>
-              <View style={styles.doctorModalInfo}>
-                <LinearGradient
-                  colors={doctor?.colors || ['#4ECDC4', '#44D8A8']}
-                  style={styles.modalDoctorAvatar}
-                >
-                  <FontAwesome5 name="user-md" size={24} color="white" />
-                </LinearGradient>
-                <View>
-                  <Text style={styles.modalDoctorName}>{doctor?.name}</Text>
-                  <Text style={styles.modalDoctorSpecialty}>
-                    {doctor?.specialty || doctor?.specialization || 'Medical Specialist'}
-                  </Text>
+            {/* Scrollable Content */}
+            <ScrollView 
+              style={styles.modalScrollView}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
+              bounces={false}
+            >
+              <View style={styles.modalBody}>
+                <View style={styles.doctorModalInfo}>
+                  <LinearGradient
+                    colors={doctor?.colors || ['#4ECDC4', '#44D8A8']}
+                    style={styles.modalDoctorAvatar}
+                  >
+                    <FontAwesome5 name="user-md" size={24} color="white" />
+                  </LinearGradient>
+                  <View>
+                    <Text style={styles.modalDoctorName}>{doctor?.name}</Text>
+                    <Text style={styles.modalDoctorSpecialty}>
+                      {doctor?.specialty || doctor?.specialization || 'Medical Specialist'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
               <Text style={styles.sectionLabel}>Select Day</Text>
               <View style={styles.daysContainer}>
@@ -521,6 +585,11 @@ const DoctorProfile = () => {
                     onPress={() => {
                       setSelectedDay(day);
                       setSelectedTime(''); // Reset time when day changes
+                      setSelectedDate(''); // Reset date when day changes
+                      
+                      // Get available dates for this day
+                      const dates = getAvailableDatesForDay(day);
+                      setAvailableDates({...availableDates, [day]: dates});
                     }}
                   >
                     <Text style={[
@@ -533,7 +602,42 @@ const DoctorProfile = () => {
                 ))}
               </View>
 
-              {selectedDay && doctor?.timings && doctor.timings[selectedDay] && (
+              {/* Date Selection - Show when day is selected */}
+              {selectedDay && availableDates[selectedDay] && availableDates[selectedDay].length > 0 && (
+                <>
+                  <Text style={styles.sectionLabel}>Select Date</Text>
+                  <View style={styles.datesContainer}>
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.datesScrollContainer}
+                    >
+                      {availableDates[selectedDay].map((dateObj, index) => (
+                        <TouchableOpacity
+                          key={dateObj.date}
+                          style={[
+                            styles.dateButton,
+                            selectedDate === dateObj.date && styles.selectedDateButton
+                          ]}
+                          onPress={() => {
+                            setSelectedDate(dateObj.date);
+                            setSelectedTime(''); // Reset time when date changes
+                          }}
+                        >
+                          <Text style={[
+                            styles.dateButtonText,
+                            selectedDate === dateObj.date && styles.selectedDateButtonText
+                          ]}>
+                            {dateObj.displayDate}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </>
+              )}
+
+              {selectedDay && selectedDate && doctor?.timings && doctor.timings[selectedDay] && (
                 <>
                   <Text style={styles.sectionLabel}>Select Time</Text>
                   <View style={styles.timesContainer}>
@@ -570,7 +674,9 @@ const DoctorProfile = () => {
                 </>
               )}
             </View>
+            </ScrollView>
 
+            {/* Fixed Action Buttons */}
             <View style={styles.modalActions}>
               <TouchableOpacity 
                 style={styles.cancelButton}
@@ -582,10 +688,10 @@ const DoctorProfile = () => {
               <TouchableOpacity 
                 style={[
                   styles.confirmButton,
-                  (!selectedDay || !selectedTime || bookingLoading) && styles.disabledButton
+                  (!selectedDay || !selectedDate || !selectedTime || bookingLoading) && styles.disabledButton
                 ]}
                 onPress={confirmBooking}
-                disabled={!selectedDay || !selectedTime || bookingLoading}
+                disabled={!selectedDay || !selectedDate || !selectedTime || bookingLoading}
               >
                 <LinearGradient
                   colors={doctor?.colors || ['#4ECDC4', '#44D8A8']}
@@ -1074,8 +1180,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: height * 0.8,
+    maxHeight: height * 0.85,
+    minHeight: height * 0.6,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    flex: 1,
+  },
+  modalScrollView: {
+    maxHeight: height * 0.5, // Reduce to give more space to header and actions
+  },
+  modalScrollContent: {
+    paddingBottom: 10,
+    paddingTop: 5,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1188,7 +1303,12 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     paddingHorizontal: 20,
+    paddingTop: 15,
+    paddingBottom: 10,
     gap: 12,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
   cancelButton: {
     flex: 1,
@@ -1221,6 +1341,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  // Date Selection Styles
+  datesContainer: {
+    marginBottom: 20,
+  },
+  datesScrollContainer: {
+    paddingHorizontal: 5,
+  },
+  dateButton: {
+    backgroundColor: '#f8f9fa',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginHorizontal: 6,
+    minWidth: 80,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  selectedDateButton: {
+    backgroundColor: '#667eea',
+    borderColor: '#667eea',
+  },
+  dateButtonText: {
+    color: '#495057',
+    fontWeight: '600',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  selectedDateButtonText: {
+    color: '#fff',
+    fontWeight: '700',
   },
 });
 
