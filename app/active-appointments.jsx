@@ -220,11 +220,24 @@ const ActiveAppointments = () => {
 
   // Check if video call should be enabled (10 minutes before appointment time)
   const isVideoCallEnabled = (appointment) => {
+    console.log('=== VIDEO CALL CHECK START ===');
+    console.log('Appointment data:', {
+      id: appointment.id,
+      status: appointment.status,
+      roomId: appointment.roomId,
+      selectedDate: appointment.selectedDate,
+      selectedTime: appointment.selectedTime,
+      doctorName: appointment.doctorName
+    });
+
     if (appointment.status !== 'confirmed' || !appointment.roomId) {
       console.log('Call disabled: status or roomId missing', { 
         status: appointment.status, 
-        roomId: appointment.roomId 
+        roomId: appointment.roomId,
+        statusCheck: appointment.status !== 'confirmed',
+        roomIdCheck: !appointment.roomId
       });
+      console.log('=== VIDEO CALL CHECK END (FAILED) ===');
       return false;
     }
     
@@ -269,6 +282,8 @@ const ActiveAppointments = () => {
       isBeforeAppointmentEnd,
       finalResult: isSameDay && isAfterEnableTime && isBeforeAppointmentEnd
     });
+    
+    console.log('=== VIDEO CALL CHECK END ===');
     
     return isSameDay && isAfterEnableTime && isBeforeAppointmentEnd;
   };
@@ -336,7 +351,19 @@ const ActiveAppointments = () => {
     }
   };
 
-  const renderAppointmentCard = ({ item }) => (
+  const renderAppointmentCard = ({ item }) => {
+    // Debug log for each appointment card
+    console.log('Rendering appointment card:', {
+      id: item.id,
+      status: item.status,
+      roomId: item.roomId,
+      selectedDate: item.selectedDate,
+      selectedTime: item.selectedTime,
+      doctorName: item.doctorName,
+      bookedAt: item.bookedAt
+    });
+
+    return (
     <View style={styles.appointmentCard}>
       <View style={styles.appointmentHeader}>
         <LinearGradient
@@ -403,12 +430,14 @@ const ActiveAppointments = () => {
           <TouchableOpacity 
             style={[styles.actionButton, styles.joinMeetingButton]}
             onPress={() => {
+              console.log('=== BUTTON CLICK START ===');
               console.log('Join button clicked for appointment:', {
                 id: item.id,
                 selectedDate: item.selectedDate,
                 selectedTime: item.selectedTime,
                 roomId: item.roomId,
-                status: item.status
+                status: item.status,
+                doctorName: item.doctorName
               });
               
               // Check video call availability only when button is clicked
@@ -418,6 +447,7 @@ const ActiveAppointments = () => {
               
               if (callEnabled) {
                 console.log('Joining video call with room ID:', item.roomId);
+                console.log('=== NAVIGATING TO VIDEO CALL ===');
                 // Join the call
                 router.push({
                   pathname: '/video-call-test',
@@ -428,30 +458,41 @@ const ActiveAppointments = () => {
                   }
                 });
               } else {
+                console.log('Call not enabled, checking time until enabled...');
                 // Show availability message
                 const timeUntilEnabled = getTimeUntilEnabled(item);
                 console.log('Time until enabled:', timeUntilEnabled);
                 
                 if (timeUntilEnabled) {
+                  console.log('Showing "not available yet" alert');
                   Alert.alert(
                     'Video Call Not Available Yet', 
                     `The video call will be available ${timeUntilEnabled.toLowerCase()}.\n\nVideo calls are enabled 10 minutes before your appointment time.\n\nAppointment: ${item.selectedDate} at ${item.selectedTime}`,
                     [{ text: 'OK' }]
                   );
                 } else {
+                  console.log('Checking if appointment time has passed...');
                   // Check if appointment time has passed
                   const now = new Date();
                   const appointmentDate = new Date(item.selectedDate);
                   const [hours, minutes] = item.selectedTime.split(':');
                   appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
                   
+                  console.log('Time comparison:', {
+                    now: now.toLocaleString(),
+                    appointmentDate: appointmentDate.toLocaleString(),
+                    hasPassed: now > appointmentDate
+                  });
+                  
                   if (now > appointmentDate) {
+                    console.log('Showing "appointment passed" alert');
                     Alert.alert(
                       'Appointment Time Passed', 
                       'This appointment time has already passed. Please contact the doctor if you need assistance.',
                       [{ text: 'OK' }]
                     );
                   } else {
+                    console.log('Showing "unavailable" alert');
                     Alert.alert(
                       'Video Call Unavailable', 
                       'There seems to be an issue with the video call setup. Please try again or contact support.',
@@ -460,6 +501,7 @@ const ActiveAppointments = () => {
                   }
                 }
               }
+              console.log('=== BUTTON CLICK END ===');
             }}
           >
             <Ionicons name="videocam" size={16} color="#059669" />
@@ -478,7 +520,8 @@ const ActiveAppointments = () => {
         )}
       </View>
     </View>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
