@@ -1,4 +1,5 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import {
@@ -52,7 +53,11 @@ const LandingScreen = () => {
         <View style={styles.headerContent}>
           <View style={styles.logoSection}>
             <View style={styles.logoContainer}>
-              <Ionicons name="medical" size={28} color="white" />
+              <Image
+                source={require('../assets/images/imglogo.png')}
+                style={styles.brandLogo}
+                resizeMode="contain"
+              />
             </View>
             <View style={styles.brandInfo}>
               <Text style={styles.appName}>Thanu-Raksha</Text>
@@ -294,6 +299,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
+    overflow: 'hidden',
+  },
+  brandLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
   },
   brandInfo: {
     flex: 1,

@@ -3,18 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    FlatList,
-    Image,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 // Conditional import for LinearGradient with fallback
@@ -56,7 +56,82 @@ const HomeScreen = () => {
   const [userPhoto, setUserPhoto] = useState(null);
   const [doctorsData, setDoctorsData] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
-  
+
+  // New: Store filtered doctors for search
+  const [filteredDoctors, setFilteredDoctors] = useState([]);
+  const [showNoSpecialistFound, setShowNoSpecialistFound] = useState(false);
+
+  // Modified search submit to fetch doctors by specialty
+  const handleSearchSubmit = async () => {
+    if (!searchQuery.trim()) {
+      setFilteredDoctors([]);
+      return;
+    }
+    try {
+      // Send symptoms to backend
+      const response = await fetch('http://10.2.8.64:5000/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ symptoms: searchQuery })
+      });
+      const data = await response.json();
+      console.log('Backend response:', data);
+
+      if (data.doctor_specialist) {
+        setLoadingDoctors(true);
+        // Fetch all doctors from Firebase
+        const doctorsResponse = await fetch(
+          'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
+        );
+        const doctorsJson = await doctorsResponse.json();
+        if (doctorsJson) {
+          const doctorsArray = Object.keys(doctorsJson).map(key => ({
+            id: key,
+            ...doctorsJson[key],
+            colors: generateDoctorColors(key),
+            isOnline: Math.random() > 0.3,
+            responseTime: `${Math.floor(Math.random() * 15) + 3} mins`,
+            patients: `${(Math.random() * 3 + 1).toFixed(1)}K+`,
+            nextAvailable: getNextAvailableTime(),
+            isVerified: true,
+            specialty: (doctorsJson[key].specialization || doctorsJson[key].specialty || 'General Medicine').trim()
+          }));
+
+          // Match ignoring case and trimming spaces
+          const specialist = data.doctor_specialist.trim().toLowerCase();
+          const filtered = doctorsArray.filter(doc =>
+            doc.specialty &&
+            doc.specialty.trim().toLowerCase() === specialist &&
+            doc.approvedAt && doc.approvedAt !== null
+          );
+
+          setFilteredDoctors(filtered);
+
+          // If no doctors found, show all doctors and set a flag/message
+          if (filtered.length === 0) {
+            setFilteredDoctors([]);
+            setShowNoSpecialistFound(true);
+          } else {
+            setShowNoSpecialistFound(false);
+          }
+        } else {
+          setFilteredDoctors([]);
+          setShowNoSpecialistFound(true);
+        }
+        setLoadingDoctors(false);
+      } else {
+        setFilteredDoctors([]);
+        setShowNoSpecialistFound(true);
+      }
+    } catch (error) {
+      console.error('Error sending search:', error);
+      setFilteredDoctors([]);
+      setShowNoSpecialistFound(true);
+    }
+  };
+
   // Language cycling function
   const cycleLanguage = () => {
     const languages = ['en', 'hi', 'te', 'ta'];
@@ -839,7 +914,7 @@ const HomeScreen = () => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Search Section - Back inside content */}
+          {/* Search Section */}
           <View style={styles.section}>
             <View style={styles.searchContainer}>
               <AntDesign name="search1" size={18} color="#667eea" />
@@ -849,9 +924,14 @@ const HomeScreen = () => {
                 placeholderTextColor="#9CA3AF"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                onSubmitEditing={handleSearchSubmit}
+                returnKeyType="search"
               />
-              <TouchableOpacity style={styles.filterButton}>
-                <AntDesign name="filter" size={18} color="#667eea" />
+              <TouchableOpacity 
+                style={styles.filterButton}
+                onPress={handleSearchSubmit} // <-- Change to trigger search
+              >
+                <AntDesign name="search1" size={18} color="#667eea" />
               </TouchableOpacity>
             </View>
           </View>
@@ -872,28 +952,45 @@ const HomeScreen = () => {
               </TouchableOpacity>
             </View>
             
-            {/* Horizontal Doctor Profiles */}
             {loadingDoctors ? (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>Loading doctors...</Text>
               </View>
-            ) : doctorsData.length > 0 ? (
-              <FlatList
-                data={doctorsData}
-                renderItem={({ item }) => renderCircleDoctorProfile(item)}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.doctorsHorizontalContainer}
-                ItemSeparatorComponent={() => <View style={{ width: 6 }} />}
-                decelerationRate="fast"
-                snapToInterval={96} // Width of circle container + separator
-                snapToAlignment="start"
-              />
             ) : (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No doctors available</Text>
-              </View>
+              <>
+                {showNoSpecialistFound && (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No specialist found. Showing all doctors.</Text>
+                  </View>
+                )}
+                {(filteredDoctors.length > 0 ? (
+                  <FlatList
+                    data={filteredDoctors}
+                    renderItem={({ item }) => renderCircleDoctorProfile(item)}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.doctorsHorizontalContainer}
+                    ItemSeparatorComponent={() => <View style={{ width: 6 }} />}
+                    decelerationRate="fast"
+                    snapToInterval={96}
+                    snapToAlignment="start"
+                  />
+                ) : (
+                  <FlatList
+                    data={doctorsData}
+                    renderItem={({ item }) => renderCircleDoctorProfile(item)}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.doctorsHorizontalContainer}
+                    ItemSeparatorComponent={() => <View style={{ width: 6 }} />}
+                    decelerationRate="fast"
+                    snapToInterval={96}
+                    snapToAlignment="start"
+                  />
+                ))}
+              </>
             )}
           </View>
 
