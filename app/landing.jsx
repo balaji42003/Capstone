@@ -1,19 +1,23 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import {
   Animated,
-  Dimensions,
-  Platform,
+  Dimensions, Image, Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
+import imgicon from '../assets/images/imglogo.png'; // already imported
+
+
+
+
+
 
 let LinearGradient;
 try {
@@ -54,7 +58,7 @@ const LandingScreen = () => {
           <View style={styles.logoSection}>
             <View style={styles.logoContainer}>
               <Image
-                source={require('../assets/images/imglogo.png')}
+                source={imgicon}
                 style={styles.brandLogo}
                 resizeMode="contain"
               />
@@ -292,19 +296,17 @@ const styles = StyleSheet.create({
     maxWidth: width * 0.68, // Reduced to prevent overflow
   },
   logoContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 62,           // Increased from 36
+    height: 62,          // Increased from 36
+    borderRadius: 24,    // Increased from 18
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
-    overflow: 'hidden',
   },
   brandLogo: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 58,           // Increased from 32
+    height: 58,          // Increased from 32
+    borderRadius: 22,    // Increased from 16
     backgroundColor: 'transparent',
   },
   brandInfo: {
