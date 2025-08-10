@@ -12,12 +12,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import imgicon from '../assets/images/imglogo.png'; // already imported
-
-
-
-
-
 
 let LinearGradient;
 try {
@@ -58,7 +52,7 @@ const LandingScreen = () => {
           <View style={styles.logoSection}>
             <View style={styles.logoContainer}>
               <Image
-                source={imgicon}
+                source={require('../assets/images/imglogo.png')}
                 style={styles.brandLogo}
                 resizeMode="contain"
               />
@@ -296,17 +290,17 @@ const styles = StyleSheet.create({
     maxWidth: width * 0.68, // Reduced to prevent overflow
   },
   logoContainer: {
-    width: 62,           // Increased from 36
-    height: 62,          // Increased from 36
-    borderRadius: 24,    // Increased from 18
+    width: 60,           // Increased from 36
+    height: 60,          // Increased from 36
+    borderRadius: 30,    // Increased from 18
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
   },
   brandLogo: {
-    width: 58,           // Increased from 32
-    height: 58,          // Increased from 32
-    borderRadius: 22,    // Increased from 16
+    width: 56,           // Increased from 32
+    height: 56,          // Increased from 32
+    borderRadius: 30,    // Increased from 16
     backgroundColor: 'transparent',
   },
   brandInfo: {
