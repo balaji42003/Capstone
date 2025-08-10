@@ -172,24 +172,97 @@ const PatientLoginScreen = () => {
     }
   };
 
-  const handleAuth = async () => {
+  // Registration: store in patient_registration node, then prompt to login (do not auto-login)
+  const handleRegister = async () => {
+    if (!formData.email || !formData.password || !formData.name || !formData.phone) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
+    }
     try {
-      // Create user session data
-      const userData = {
-        userType: 'patient',
-        email: formData.email,
-        name: formData.name || 'Patient User',
-        loginTime: new Date().toISOString()
-      };
-
-      // Store user session
-      await AsyncStorage.setItem('userSession', JSON.stringify(userData));
-      
-      // Navigate to patient dashboard (tabs)
-      router.replace('/(tabs)');
+      setIsLoading(true);
+      const firebaseUrl = 'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/patient_registration.json';
+      // Check if email already exists
+      const checkRes = await fetch(firebaseUrl);
+      const patients = await checkRes.json();
+      const exists = patients && Object.values(patients).some(
+        p => p.email && p.email.toLowerCase() === formData.email.toLowerCase()
+      );
+      if (exists) {
+        Alert.alert('Error', 'Email already registered');
+        setIsLoading(false);
+        return;
+      }
+      // Store registration
+      await fetch(firebaseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      Alert.alert(
+        'Registration Successful',
+        'Your registration was successful! Please login with your credentials.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setIsLogin(true);
+              setFormData({ email: '', password: '', name: '', phone: '' });
+            }
+          }
+        ]
+      );
     } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert('Error', 'Login failed. Please try again.');
+      Alert.alert('Error', 'Registration failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Login: check credentials from patient_registration node
+  const handleLogin = async () => {
+    if (!formData.email || !formData.password) {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const firebaseUrl = 'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/patient_registration.json';
+      const res = await fetch(firebaseUrl);
+      const patients = await res.json();
+
+      // Defensive: check if patients exist and are an object
+      if (!patients || typeof patients !== 'object') {
+        Alert.alert('Error', 'No registered users found. Please register first.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Find user by email and password
+      const userEntry = Object.entries(patients).find(
+        ([, p]) =>
+          p.email &&
+          p.email.toLowerCase() === formData.email.toLowerCase() &&
+          p.password === formData.password
+      );
+
+      if (!userEntry) {
+        Alert.alert('Error', 'Invalid credentials');
+        setIsLoading(false);
+        return;
+      }
+
+      // Store user session with firebase key as uid
+      const [firebaseId, user] = userEntry;
+      const userSession = { ...user, uid: firebaseId };
+      await AsyncStorage.setItem('userSession', JSON.stringify(userSession));
+
+      Alert.alert('Success', 'Login successful!', [
+        { text: 'Continue', onPress: () => router.replace('/(tabs)') }
+      ]);
+    } catch (error) {
+      Alert.alert('Error', 'Login failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -267,29 +340,33 @@ const PatientLoginScreen = () => {
               />
             </View>
 
-            <TouchableOpacity style={styles.authButton} onPress={handleAuth}>
+            <TouchableOpacity
+              style={styles.authButton}
+              onPress={isLogin ? handleLogin : handleRegister}
+              disabled={isLoading}
+            >
               <LinearGradient
                 colors={['#667eea', '#764ba2']}
                 style={styles.authButtonGradient}
               >
                 <Text style={styles.authButtonText}>
-                  {isLogin ? 'Login' : 'Register'}
+                  {isLoading ? 'Please wait...' : isLogin ? 'Login' : 'Register'}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
-                {/* Google OAuth Login Button */}
-                <TouchableOpacity
-                  style={styles.googleButton}
-                  onPress={handleGoogleLogin}
-                  disabled={isLoading}
-                >
-                  <View style={styles.googleButtonContent}>
-                    <Ionicons name="logo-google" size={24} color="#DB4437" />
-                    <Text style={styles.googleButtonText}>
-                      {isLoading ? 'Authenticating...' : 'Login with Google'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+            {/* Google OAuth Login Button */}
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={handleGoogleLogin}
+              disabled={isLoading}
+            >
+              <View style={styles.googleButtonContent}>
+                <Ionicons name="logo-google" size={24} color="#DB4437" />
+                <Text style={styles.googleButtonText}>
+                  {isLoading ? 'Authenticating...' : 'Login with Google'}
+                </Text>
+              </View>
+            </TouchableOpacity>
 
             <TouchableOpacity 
               style={styles.switchButton}

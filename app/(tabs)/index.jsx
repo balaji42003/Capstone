@@ -60,11 +60,13 @@ const HomeScreen = () => {
   // New: Store filtered doctors for search
   const [filteredDoctors, setFilteredDoctors] = useState([]);
   const [showNoSpecialistFound, setShowNoSpecialistFound] = useState(false);
+  const [searchActive, setSearchActive] = useState(false); // <-- Add this state
 
   // Modified search submit to fetch doctors by specialty
   const handleSearchSubmit = async () => {
     if (!searchQuery.trim()) {
       setFilteredDoctors([]);
+      setSearchActive(false);
       return;
     }
     try {
@@ -77,11 +79,8 @@ const HomeScreen = () => {
         body: JSON.stringify({ symptoms: searchQuery })
       });
       const data = await response.json();
-      console.log('Backend response:', data);
-
       if (data.doctor_specialist) {
         setLoadingDoctors(true);
-        // Fetch all doctors from Firebase
         const doctorsResponse = await fetch(
           'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
         );
@@ -98,20 +97,15 @@ const HomeScreen = () => {
             isVerified: true,
             specialty: (doctorsJson[key].specialization || doctorsJson[key].specialty || 'General Medicine').trim()
           }));
-
-          // Match ignoring case and trimming spaces
           const specialist = data.doctor_specialist.trim().toLowerCase();
           const filtered = doctorsArray.filter(doc =>
             doc.specialty &&
             doc.specialty.trim().toLowerCase() === specialist &&
             doc.approvedAt && doc.approvedAt !== null
           );
-
           setFilteredDoctors(filtered);
-
-          // If no doctors found, show all doctors and set a flag/message
+          setSearchActive(true); // <-- Set search active
           if (filtered.length === 0) {
-            setFilteredDoctors([]);
             setShowNoSpecialistFound(true);
           } else {
             setShowNoSpecialistFound(false);
@@ -126,10 +120,17 @@ const HomeScreen = () => {
         setShowNoSpecialistFound(true);
       }
     } catch (error) {
-      console.error('Error sending search:', error);
       setFilteredDoctors([]);
       setShowNoSpecialistFound(true);
     }
+  };
+
+  // Clear search and show all doctors
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setFilteredDoctors([]);
+    setShowNoSpecialistFound(false);
+    setSearchActive(false);
   };
 
   // Language cycling function
@@ -917,7 +918,6 @@ const HomeScreen = () => {
           {/* Search Section */}
           <View style={styles.section}>
             <View style={styles.searchContainer}>
-              <AntDesign name="search1" size={18} color="#667eea" />
               <TextInput
                 style={styles.searchInput}
                 placeholder={t.search}
@@ -929,9 +929,13 @@ const HomeScreen = () => {
               />
               <TouchableOpacity 
                 style={styles.filterButton}
-                onPress={handleSearchSubmit} // <-- Change to trigger search
+                onPress={searchActive ? handleClearSearch : handleSearchSubmit}
               >
-                <AntDesign name="search1" size={18} color="#667eea" />
+                <AntDesign
+                  name={searchActive ? "close" : "search1"}
+                  size={18}
+                  color="#667eea"
+                />
               </TouchableOpacity>
             </View>
           </View>
