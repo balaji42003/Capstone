@@ -1,16 +1,18 @@
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import {
   Animated,
-  Dimensions, Image, Platform,
+  Dimensions,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 
 let LinearGradient;
@@ -290,17 +292,19 @@ const styles = StyleSheet.create({
     maxWidth: width * 0.68, // Reduced to prevent overflow
   },
   logoContainer: {
-    width: 60,           // Increased from 36
-    height: 60,          // Increased from 36
-    borderRadius: 30,    // Increased from 18
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
+    overflow: 'hidden',
   },
   brandLogo: {
-    width: 56,           // Increased from 32
-    height: 56,          // Increased from 32
-    borderRadius: 30,    // Increased from 16
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'transparent',
   },
   brandInfo: {

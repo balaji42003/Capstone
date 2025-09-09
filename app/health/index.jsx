@@ -1,7 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { AntDesign, Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
@@ -15,67 +25,124 @@ try {
   );
 }
 
-const HealthIndex = () => {
-  const router = useRouter();
+const ExploreScreen = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [doctorsData, setDoctorsData] = useState([]);
+  const [filteredDoctors, setFilteredDoctors] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
+  const [searchActive, setSearchActive] = useState(false);
+  const [showNoSpecialistFound, setShowNoSpecialistFound] = useState(false);
 
-  const healthServices = [
-    {
-      id: '1',
-      title: 'Skin Disease\nDetector',
-      icon: 'body-outline',
-      color: ['#667eea', '#764ba2'],
-      route: '/health/SkinDiseaseDetector'
-    },
-    {
-      id: '2',
-      title: 'Eye Condition\nAnalyzer',
-      icon: 'eye-outline',
-      color: ['#f093fb', '#f5576c'],
-      route: '/health/EyeConditionAnalyzer'
-    },
-    {
-      id: '3',
-      title: 'Food Calorie\nChecker',
-      icon: 'restaurant-outline',
-      color: ['#4facfe', '#00f2fe'],
-      route: '/health/PlateCalorieChecker'
-    },
-    {
-      id: '4',
-      title: 'Health Chat\nAssistant',
-      icon: 'chatbubbles-outline',
-      color: ['#43e97b', '#38f9d7'],
-      route: '/health/BreastCancerRiskChatbot'
-    },
-    {
-      id: '5',
-      title: 'Fever & Cold\nChecker',
-      icon: 'thermometer-outline',
-      color: ['#fa709a', '#fee140'],
-      route: '/health/FeverFluSymptomChecker'
-    },
-    {
-      id: '6',
-      title: 'Diet & Nutrition\nPlanner',
-      icon: 'nutrition-outline',
-      color: ['#a8edea', '#fed6e3'],
-      route: '/health/DailyDietNutritionPlanner'
-    },
-    {
-      id: '7',
-      title: 'Sleep Health\nTracker',
-      icon: 'bed-outline',
-      color: ['#d299c2', '#fef9d7'],
-      route: '/health/SmartSleepBedtimeCompanion'
-    },
-    {
-      id: '8',
-      title: 'Blood Sugar\nMonitor',
-      icon: 'water-outline',
-      color: ['#89f7fe', '#66a6ff'],
-      route: '/health/DiabetesGlucoseRiskMonitor'
+  // Fetch doctors from Firebase on mount
+  useEffect(() => {
+    const loadDoctorsData = async () => {
+      try {
+        setLoadingDoctors(true);
+        const response = await fetch(
+          'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
+        );
+        const doctorsResponse = await response.json();
+        if (doctorsResponse) {
+          const doctorsArray = Object.keys(doctorsResponse).map(key => ({
+            id: key,
+            ...doctorsResponse[key],
+            specialty: (doctorsResponse[key].specialization || doctorsResponse[key].specialty || 'General Medicine').trim(),
+          }));
+          // Only approved doctors
+          const approvedDoctors = doctorsArray.filter(doctor =>
+            doctor.approvedAt && doctor.approvedAt !== null
+          );
+          setDoctorsData(approvedDoctors);
+        } else {
+          setDoctorsData([]);
+        }
+      } catch (error) {
+        setDoctorsData([]);
+      } finally {
+        setLoadingDoctors(false);
+      }
+    };
+    loadDoctorsData();
+  }, []);
+
+  // Search logic (same as home)
+  const handleSearchSubmit = async () => {
+    if (!searchQuery.trim()) {
+      setFilteredDoctors([]);
+      setSearchActive(false);
+      setShowNoSpecialistFound(false);
+      return;
     }
-  ];
+    try {
+      const response = await fetch('http://10.2.8.64:5000/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptoms: searchQuery }),
+      });
+      const data = await response.json();
+      if (data.doctor_specialist) {
+        setLoadingDoctors(true);
+        const doctorsResponse = await fetch(
+          'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
+        );
+        const doctorsJson = await doctorsResponse.json();
+        if (doctorsJson) {
+          const doctorsArray = Object.keys(doctorsJson).map(key => ({
+            id: key,
+            ...doctorsJson[key],
+            specialty: (doctorsJson[key].specialization || doctorsJson[key].specialty || 'General Medicine').trim(),
+          }));
+          const specialist = data.doctor_specialist.trim().toLowerCase();
+          const filtered = doctorsArray.filter(doc =>
+            doc.specialty &&
+            doc.specialty.trim().toLowerCase() === specialist &&
+            doc.approvedAt && doc.approvedAt !== null
+          );
+          setFilteredDoctors(filtered);
+          setSearchActive(true);
+          setShowNoSpecialistFound(filtered.length === 0);
+        } else {
+          setFilteredDoctors([]);
+          setShowNoSpecialistFound(true);
+        }
+        setLoadingDoctors(false);
+      } else {
+        setFilteredDoctors([]);
+        setShowNoSpecialistFound(true);
+      }
+    } catch (error) {
+      setFilteredDoctors([]);
+      setShowNoSpecialistFound(true);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setFilteredDoctors([]);
+    setShowNoSpecialistFound(false);
+    setSearchActive(false);
+  };
+
+  const renderDoctorCard = ({ item }) => (
+    <View style={styles.doctorCard}>
+      <View style={styles.doctorInfo}>
+        <View style={styles.avatar}>
+          {item.photo ? (
+            <Image source={{ uri: item.photo }} style={styles.avatarImg} />
+          ) : (
+            <Ionicons name="person" size={32} color="#667eea" />
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.doctorName}>{item.name}</Text>
+          <Text style={styles.doctorSpecialty}>{item.specialty}</Text>
+        </View>
+      </View>
+      <TouchableOpacity style={styles.detailsBtn}>
+        <Text style={styles.detailsBtnText}>View Details</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -89,27 +156,51 @@ const HealthIndex = () => {
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.servicesGrid}>
-          {healthServices.map((service, index) => (
-            <TouchableOpacity
-              key={service.id}
-              style={styles.serviceCard}
-              onPress={() => router.push(service.route)}
-            >
-              <LinearGradient
-                colors={service.color}
-                style={styles.serviceIcon}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Ionicons name={service.icon} size={32} color="white" />
-              </LinearGradient>
-              <Text style={styles.serviceTitle}>{service.title}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+      <View style={styles.searchBarSection}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search doctors by symptoms..."
+          placeholderTextColor="#9CA3AF"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearchSubmit}
+          returnKeyType="search"
+        />
+        <TouchableOpacity
+          style={styles.filterButton}
+          onPress={searchActive ? handleClearSearch : handleSearchSubmit}
+        >
+          <AntDesign
+            name={searchActive ? "close" : "search1"}
+            size={18}
+            color="#667eea"
+          />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.sectionTitle}>Popular Doctors</Text>
+      {loadingDoctors ? (
+        <ActivityIndicator size="large" color="#667eea" style={{ marginTop: 30 }} />
+      ) : (
+        <>
+          {showNoSpecialistFound && (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No specialist found. Showing all doctors.</Text>
+            </View>
+          )}
+          <FlatList
+            data={filteredDoctors.length > 0 ? filteredDoctors : doctorsData}
+            renderItem={renderDoctorCard}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.doctorsList}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No doctors available</Text>
+              </View>
+            }
+          />
+        </>
+      )}
     </SafeAreaView>
   );
 };
@@ -145,45 +236,117 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  servicesGrid: {
+  searchBarSection: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingBottom: 40,
-  },
-  serviceCard: {
-    width: '47%',
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
     alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    margin: 16,
   },
-  serviceIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  filterButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginLeft: 6,
   },
-  serviceTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1f2937',
-    textAlign: 'center',
-    lineHeight: 16,
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginLeft: 20,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  doctorsList: {
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+  },
+  doctorCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.08)',
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'column',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#667eea',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  doctorInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  doctorName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+  },
+  doctorSpecialty: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  detailsBtn: {
+    alignSelf: 'flex-end',
+    marginTop: 6,
+    backgroundColor: '#667eea',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
+  detailsBtnText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  emptyContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontStyle: 'italic',
   },
 });
 
-export default HealthIndex;
+export default ExploreScreen;
