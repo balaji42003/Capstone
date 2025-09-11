@@ -1017,8 +1017,8 @@ const DoctorDashboard = () => {
                       <View style={styles.patientInfoRow}>
                         <View style={styles.patientAvatar}>
                           <Text style={styles.avatarText}>
-                            {(appointment.patientName || appointment.userName || 'P').charAt(0).toUpperCase()}
-                          </Text>
+                            {(appointment.patientName || appointment.userName || 'P').charAt(0).toUpperCase()
+                          }</Text>
                         </View>
                         <View style={styles.patientInfoText}>
                           <Text style={styles.patientName}>
@@ -1145,7 +1145,7 @@ const DoctorDashboard = () => {
                                     params: {
                                       roomId: appointment.roomId,
                                       userName: doctorName || 'Doctor',
-                                      userId: `doctor_${Date.now()}`
+                                      userId: `doctor_${doctorId}_${Date.now()}`
                                     }
                                   });
                                 } else {
@@ -1318,7 +1318,7 @@ const DoctorDashboard = () => {
                   </View>
                 ) : (
                   <View style={styles.emptyState}>
-                    <Ionicons name="calendar-outline" size={48} color="#9CA3AF" />
+                    <Ionicons name="calendar-outline" size={48} color="#9CA3B4" />
                     <Text style={styles.emptyStateText}>No schedules set yet</Text>
                     <Text style={styles.emptyStateSubtext}>Tap "Add New" to create your first schedule</Text>
                   </View>

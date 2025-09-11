@@ -454,7 +454,7 @@ const ActiveAppointments = () => {
                   params: {
                     roomId: item.roomId,
                     userName: item.patientName || item.userName || 'Patient',
-                    userId: `patient_${Date.now()}`
+                    userId: `patient_${userEmail.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`
                   }
                 });
               } else {

@@ -478,7 +478,8 @@ const HomeScreen = () => {
       title: t.healthRecords, 
       icon: 'document-text', 
       colors: ['#10b981', '#34d399'],
-      bgColor: '#F0FFF8'
+      bgColor: '#F0FFF8',
+      route: '/health-records'
     },
     { 
       id: '3', 
@@ -493,7 +494,8 @@ const HomeScreen = () => {
       title: t.findPharmacy, 
       icon: 'medical', 
       colors: ['#ef4444', '#f87171'],
-      bgColor: '#FFF0F0'
+      bgColor: '#FFF0F0',
+      route: '/prescription-view'
     },
     { 
       id: '5', 

@@ -24,10 +24,30 @@ export default function VideoCallTest() {
   const yourAppID = 274983986;
   const yourAppSign = "90114740a4ffede9d226e67220839b9f7d7978326644b6ce2e9f0fafe1d1d699";
   
-  // Use parameters or default test data
-  const callID = roomId || "test_call_room";
-  const displayName = userName || "Test User";
-  const userIdentifier = userId || "test_user_123";
+  // No default values - both participants must use same room parameters
+  const callID = roomId;
+  const displayName = userName;
+  const userIdentifier = userId;
+
+  // Validate required parameters
+  if (!callID || !displayName || !userIdentifier) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="warning-outline" size={64} color="#e53e3e" />
+        <Text style={styles.errorTitle}>Missing Parameters</Text>
+        <Text style={styles.errorText}>
+          Room ID, username, and user ID are required.{'\n'}
+          Both participants must use the same Room ID.
+        </Text>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (!isZegoAvailable) {
     return (
