@@ -446,15 +446,18 @@ const ActiveAppointments = () => {
               console.log('Call enabled result:', callEnabled);
               
               if (callEnabled) {
-                console.log('Joining video call with room ID:', item.roomId);
-                console.log('=== NAVIGATING TO VIDEO CALL ===');
-                // Join the call
+                console.log('=== PATIENT JOINING VIDEO CALL ===');
+                console.log('Room ID:', item.roomId);
+                console.log('Patient Name:', item.patientName || item.userName || 'Patient');
+                console.log('Patient User ID:', `patient_${item.id}_${item.userEmail?.replace(/[^a-zA-Z0-9]/g, '_') || 'user'}`);
+                
+                // Join the call with consistent userId
                 router.push({
                   pathname: '/video-call-test',
                   params: {
                     roomId: item.roomId,
                     userName: item.patientName || item.userName || 'Patient',
-                    userId: `patient_${userEmail.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`
+                    userId: `patient_${item.id}_${item.userEmail?.replace(/[^a-zA-Z0-9]/g, '_') || 'user'}`
                   }
                 });
               } else {

@@ -153,6 +153,43 @@ const DoctorProfile = () => {
     }
   }, [doctorId]);
 
+  // Generate 15-minute time slots between start and end time (excluding end time)
+  const generateTimeSlots = (startTime, endTime) => {
+    const slots = [];
+    
+    // Parse start time
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    let currentHour = startHour;
+    let currentMin = startMin;
+    
+    // Parse end time
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    const endTotalMinutes = endHour * 60 + endMin;
+    
+    // Generate slots with 15-minute intervals
+    while (true) {
+      const currentTotalMinutes = currentHour * 60 + currentMin;
+      
+      // Stop if we've reached or passed the end time
+      if (currentTotalMinutes >= endTotalMinutes) {
+        break;
+      }
+      
+      // Format and add the time slot
+      const formattedTime = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
+      slots.push(formattedTime);
+      
+      // Add 15 minutes
+      currentMin += 15;
+      if (currentMin >= 60) {
+        currentMin = 0;
+        currentHour++;
+      }
+    }
+    
+    return slots;
+  };
+
   const getNextAvailableTime = () => {
     const times = [
       'Today 2:00 PM',
@@ -641,35 +678,26 @@ const DoctorProfile = () => {
                 <>
                   <Text style={styles.sectionLabel}>Select Time</Text>
                   <View style={styles.timesContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.timeButton,
-                        selectedTime === doctor.timings[selectedDay].startTime && styles.selectedTimeButton
-                      ]}
-                      onPress={() => setSelectedTime(doctor.timings[selectedDay].startTime)}
-                    >
-                      <Text style={[
-                        styles.timeButtonText,
-                        selectedTime === doctor.timings[selectedDay].startTime && styles.selectedTimeButtonText
-                      ]}>
-                        {doctor.timings[selectedDay].startTime}
-                      </Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[
-                        styles.timeButton,
-                        selectedTime === doctor.timings[selectedDay].endTime && styles.selectedTimeButton
-                      ]}
-                      onPress={() => setSelectedTime(doctor.timings[selectedDay].endTime)}
-                    >
-                      <Text style={[
-                        styles.timeButtonText,
-                        selectedTime === doctor.timings[selectedDay].endTime && styles.selectedTimeButtonText
-                      ]}>
-                        {doctor.timings[selectedDay].endTime}
-                      </Text>
-                    </TouchableOpacity>
+                    {generateTimeSlots(
+                      doctor.timings[selectedDay].startTime, 
+                      doctor.timings[selectedDay].endTime
+                    ).map((timeSlot, index) => (
+                      <TouchableOpacity
+                        key={timeSlot}
+                        style={[
+                          styles.timeButton,
+                          selectedTime === timeSlot && styles.selectedTimeButton
+                        ]}
+                        onPress={() => setSelectedTime(timeSlot)}
+                      >
+                        <Text style={[
+                          styles.timeButtonText,
+                          selectedTime === timeSlot && styles.selectedTimeButtonText
+                        ]}>
+                          {timeSlot}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 </>
               )}
@@ -1276,17 +1304,19 @@ const styles = StyleSheet.create({
   },
   timesContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     marginBottom: 20,
   },
   timeButton: {
-    flex: 1,
+    minWidth: '30%',
     paddingVertical: 12,
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
     borderWidth: 1,
     borderColor: '#E2E8F0',
     alignItems: 'center',
+    marginBottom: 8,
   },
   selectedTimeButton: {
     backgroundColor: '#22C55E',

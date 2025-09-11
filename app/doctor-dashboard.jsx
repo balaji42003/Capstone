@@ -210,10 +210,22 @@ const DoctorDashboard = () => {
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   
   const timeSlots = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
-    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
-    '18:00', '18:30', '19:00', '19:30', '20:00'
+    '09:00', '09:15', '09:30', '09:45', 
+    '10:00', '10:15', '10:30', '10:45',
+    '11:00', '11:15', '11:30', '11:45',
+    '12:00', '12:15', '12:30', '12:45',
+    '13:00', '13:15', '13:30', '13:45',
+    '14:00', '14:15', '14:30', '14:45',
+    '15:00', '15:15', '15:30', '15:45',
+    '16:00', '16:15', '16:30', '16:45',
+    '17:00', '17:15', '17:30', '17:45',
+    '18:00', '18:15', '18:30', '18:45',
+    '19:00', '19:15', '19:30', '19:45',
+    '20:00', '20:15', '20:30', '20:45',
+    '21:00', '21:15', '21:30', '21:45',
+    '22:00', '22:15', '22:30', '22:45',
+    '23:00', '23:15', '23:30', '23:45',
+    '00:00'
   ];
 
   const saveSchedule = async () => {
@@ -1139,13 +1151,19 @@ const DoctorDashboard = () => {
                                 const callEnabled = isVideoCallEnabled(appointment);
                                 
                                 if (callEnabled) {
-                                  // Join the call
+                                  // Log the call details for debugging
+                                  console.log('=== DOCTOR STARTING VIDEO CALL ===');
+                                  console.log('Room ID:', appointment.roomId);
+                                  console.log('Doctor Name:', doctorName || 'Doctor');
+                                  console.log('Doctor User ID:', `doctor_${appointment.id}_${appointment.doctorId || doctorId}`);
+                                  
+                                  // Join the call with consistent userId
                                   router.push({
                                     pathname: '/video-call-test',
                                     params: {
                                       roomId: appointment.roomId,
                                       userName: doctorName || 'Doctor',
-                                      userId: `doctor_${doctorId}_${Date.now()}`
+                                      userId: `doctor_${appointment.id}_${appointment.doctorId || doctorId}`
                                     }
                                   });
                                 } else {
