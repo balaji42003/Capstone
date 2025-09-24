@@ -218,111 +218,10 @@ const ActiveAppointments = () => {
     });
   };
 
-  // Check if video call should be enabled (10 minutes before appointment time)
+  // Simple video call - no time validations
   const isVideoCallEnabled = (appointment) => {
-    console.log('=== VIDEO CALL CHECK START ===');
-    console.log('Appointment data:', {
-      id: appointment.id,
-      status: appointment.status,
-      roomId: appointment.roomId,
-      selectedDate: appointment.selectedDate,
-      selectedTime: appointment.selectedTime,
-      doctorName: appointment.doctorName
-    });
-
-    if (appointment.status !== 'confirmed' || !appointment.roomId) {
-      console.log('Call disabled: status or roomId missing', { 
-        status: appointment.status, 
-        roomId: appointment.roomId,
-        statusCheck: appointment.status !== 'confirmed',
-        roomIdCheck: !appointment.roomId
-      });
-      console.log('=== VIDEO CALL CHECK END (FAILED) ===');
-      return false;
-    }
-    
-    const now = new Date();
-    const appointmentDate = new Date(appointment.selectedDate);
-    
-    // Parse time more carefully
-    const timeStr = appointment.selectedTime;
-    if (!timeStr || !timeStr.includes(':')) {
-      console.log('Invalid time format:', timeStr);
-      return false;
-    }
-    
-    const [hoursStr, minutesStr] = timeStr.split(':');
-    const hours = parseInt(hoursStr, 10);
-    const minutes = parseInt(minutesStr, 10);
-    
-    if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-      console.log('Invalid time values:', { hours, minutes });
-      return false;
-    }
-    
-    appointmentDate.setHours(hours, minutes, 0, 0);
-    
-    // Enable video call 10 minutes before appointment time
-    const enableTime = new Date(appointmentDate.getTime() - 10 * 60 * 1000);
-    
-    // Check if it's the same day
-    const isSameDay = now.toDateString() === appointmentDate.toDateString();
-    
-    // Check if current time is within the allowed window (10 minutes before to appointment end time)
-    const isAfterEnableTime = now >= enableTime;
-    const isBeforeAppointmentEnd = now <= appointmentDate;
-    
-    console.log('Video call check:', {
-      appointmentId: appointment.id,
-      now: now.toLocaleString(),
-      appointmentDate: appointmentDate.toLocaleString(),
-      enableTime: enableTime.toLocaleString(),
-      isSameDay,
-      isAfterEnableTime,
-      isBeforeAppointmentEnd,
-      finalResult: isSameDay && isAfterEnableTime && isBeforeAppointmentEnd
-    });
-    
-    console.log('=== VIDEO CALL CHECK END ===');
-    
-    return isSameDay && isAfterEnableTime && isBeforeAppointmentEnd;
-  };
-
-  // Get time remaining until video call is enabled
-  const getTimeUntilEnabled = (appointment) => {
-    const now = new Date();
-    const appointmentDate = new Date(appointment.selectedDate);
-    
-    // Parse time more carefully
-    const timeStr = appointment.selectedTime;
-    if (!timeStr || !timeStr.includes(':')) {
-      return null;
-    }
-    
-    const [hoursStr, minutesStr] = timeStr.split(':');
-    const hours = parseInt(hoursStr, 10);
-    const minutes = parseInt(minutesStr, 10);
-    
-    if (isNaN(hours) || isNaN(minutes)) {
-      return null;
-    }
-    
-    appointmentDate.setHours(hours, minutes, 0, 0);
-    
-    const enableTime = new Date(appointmentDate.getTime() - 10 * 60 * 1000);
-    const timeDiff = enableTime.getTime() - now.getTime();
-    
-    // If time has passed, return null
-    if (timeDiff <= 0) return null;
-    
-    const hoursRemaining = Math.floor(timeDiff / (1000 * 60 * 60));
-    const minutesRemaining = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (hoursRemaining > 0) {
-      return `Available in ${hoursRemaining}h ${minutesRemaining}m`;
-    } else {
-      return `Available in ${minutesRemaining}m`;
-    }
+    // Simply check if appointment is confirmed and has roomId
+    return appointment.status === 'confirmed' && appointment.roomId;
   };
 
   // Auto-delete appointments after the day ends
@@ -440,20 +339,16 @@ const ActiveAppointments = () => {
                 doctorName: item.doctorName
               });
               
-              // Check video call availability only when button is clicked
-              const callEnabled = isVideoCallEnabled(item);
-              
-              console.log('Call enabled result:', callEnabled);
-              
-              if (callEnabled) {
+              // Simple video call - join immediately if roomId exists
+              if (item.roomId) {
                 console.log('=== PATIENT JOINING VIDEO CALL ===');
                 console.log('Room ID:', item.roomId);
                 console.log('Patient Name:', item.patientName || item.userName || 'Patient');
                 console.log('Patient User ID:', `patient_${item.id}_${item.userEmail?.replace(/[^a-zA-Z0-9]/g, '_') || 'user'}`);
                 
-                // Join the call with consistent userId
+                // Join the call immediately
                 router.push({
-                  pathname: '/video-call-test',
+                  pathname: '/video-call',
                   params: {
                     roomId: item.roomId,
                     userName: item.patientName || item.userName || 'Patient',
@@ -461,48 +356,7 @@ const ActiveAppointments = () => {
                   }
                 });
               } else {
-                console.log('Call not enabled, checking time until enabled...');
-                // Show availability message
-                const timeUntilEnabled = getTimeUntilEnabled(item);
-                console.log('Time until enabled:', timeUntilEnabled);
-                
-                if (timeUntilEnabled) {
-                  console.log('Showing "not available yet" alert');
-                  Alert.alert(
-                    'Video Call Not Available Yet', 
-                    `The video call will be available ${timeUntilEnabled.toLowerCase()}.\n\nVideo calls are enabled 10 minutes before your appointment time.\n\nAppointment: ${item.selectedDate} at ${item.selectedTime}`,
-                    [{ text: 'OK' }]
-                  );
-                } else {
-                  console.log('Checking if appointment time has passed...');
-                  // Check if appointment time has passed
-                  const now = new Date();
-                  const appointmentDate = new Date(item.selectedDate);
-                  const [hours, minutes] = item.selectedTime.split(':');
-                  appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-                  
-                  console.log('Time comparison:', {
-                    now: now.toLocaleString(),
-                    appointmentDate: appointmentDate.toLocaleString(),
-                    hasPassed: now > appointmentDate
-                  });
-                  
-                  if (now > appointmentDate) {
-                    console.log('Showing "appointment passed" alert');
-                    Alert.alert(
-                      'Appointment Time Passed', 
-                      'This appointment time has already passed. Please contact the doctor if you need assistance.',
-                      [{ text: 'OK' }]
-                    );
-                  } else {
-                    console.log('Showing "unavailable" alert');
-                    Alert.alert(
-                      'Video Call Unavailable', 
-                      'There seems to be an issue with the video call setup. Please try again or contact support.',
-                      [{ text: 'OK' }]
-                    );
-                  }
-                }
+                Alert.alert('Error', 'No meeting room available');
               }
               console.log('=== BUTTON CLICK END ===');
             }}

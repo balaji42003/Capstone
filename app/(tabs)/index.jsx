@@ -1945,11 +1945,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
-    gap: 16,
+    paddingHorizontal: 16,
   },
   gridHealthCard: {
-    width: (width - 56) / 2,
+    width: '48%',
     height: 200,
     borderRadius: 20,
     overflow: 'hidden',

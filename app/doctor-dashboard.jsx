@@ -372,45 +372,10 @@ const DoctorDashboard = () => {
     );
   };
 
-  // Check if video call should be enabled (10 minutes before appointment time)
+  // Simple video call - no time validations
   const isVideoCallEnabled = (appointment) => {
-    if (appointment.status !== 'confirmed' || !appointment.roomId) return false;
-    
-    const now = new Date();
-    const appointmentDate = new Date(appointment.selectedDate);
-    const [hours, minutes] = appointment.selectedTime.split(':');
-    appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    
-    // Enable video call 10 minutes before appointment time
-    const enableTime = new Date(appointmentDate.getTime() - 10 * 60 * 1000);
-    
-    // Check if it's the same day and within the time range
-    const isSameDay = now.toDateString() === appointmentDate.toDateString();
-    const isWithinTimeRange = now >= enableTime && now <= appointmentDate;
-    
-    return isSameDay && (isWithinTimeRange || now <= appointmentDate);
-  };
-
-  // Get time remaining until video call is enabled
-  const getTimeUntilEnabled = (appointment) => {
-    const now = new Date();
-    const appointmentDate = new Date(appointment.selectedDate);
-    const [hours, minutes] = appointment.selectedTime.split(':');
-    appointmentDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    
-    const enableTime = new Date(appointmentDate.getTime() - 10 * 60 * 1000);
-    const timeDiff = enableTime.getTime() - now.getTime();
-    
-    if (timeDiff <= 0) return null;
-    
-    const hoursRemaining = Math.floor(timeDiff / (1000 * 60 * 60));
-    const minutesRemaining = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (hoursRemaining > 0) {
-      return `Available in ${hoursRemaining}h ${minutesRemaining}m`;
-    } else {
-      return `Available in ${minutesRemaining}m`;
-    }
+    // Simply check if appointment is confirmed and has roomId
+    return appointment.status === 'confirmed' && appointment.roomId;
   };
 
   // Auto-delete appointments after the day ends
@@ -1147,19 +1112,16 @@ const DoctorDashboard = () => {
                             <TouchableOpacity 
                               style={styles.joinCallButton}
                               onPress={() => {
-                                // Check video call availability only when button is clicked
-                                const callEnabled = isVideoCallEnabled(appointment);
-                                
-                                if (callEnabled) {
-                                  // Log the call details for debugging
+                                // Simple video call - join immediately if roomId exists
+                                if (appointment.roomId) {
                                   console.log('=== DOCTOR STARTING VIDEO CALL ===');
                                   console.log('Room ID:', appointment.roomId);
                                   console.log('Doctor Name:', doctorName || 'Doctor');
                                   console.log('Doctor User ID:', `doctor_${appointment.id}_${appointment.doctorId || doctorId}`);
                                   
-                                  // Join the call with consistent userId
+                                  // Join the call immediately
                                   router.push({
-                                    pathname: '/video-call-test',
+                                    pathname: '/video-call',
                                     params: {
                                       roomId: appointment.roomId,
                                       userName: doctorName || 'Doctor',
@@ -1167,21 +1129,7 @@ const DoctorDashboard = () => {
                                     }
                                   });
                                 } else {
-                                  // Show availability message
-                                  const timeUntilEnabled = getTimeUntilEnabled(appointment);
-                                  if (timeUntilEnabled) {
-                                    Alert.alert(
-                                      'Video Call Not Available', 
-                                      `The video call will be available ${timeUntilEnabled.toLowerCase()}.\n\nPlease wait until 10 minutes before the appointment time.`,
-                                      [{ text: 'OK' }]
-                                    );
-                                  } else {
-                                    Alert.alert(
-                                      'Video Call Unavailable', 
-                                      'This video call is no longer available.',
-                                      [{ text: 'OK' }]
-                                    );
-                                  }
+                                  Alert.alert('Error', 'No meeting room available');
                                 }
                               }}
                             >

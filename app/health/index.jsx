@@ -192,6 +192,8 @@ const ExploreScreen = () => {
             data={filteredDoctors.length > 0 ? filteredDoctors : doctorsData}
             renderItem={renderDoctorCard}
             keyExtractor={item => item.id}
+            numColumns={2}
+            columnWrapperStyle={styles.columnWrapper}
             contentContainerStyle={styles.doctorsList}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
@@ -274,6 +276,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 30,
   },
+  columnWrapper: {
+    justifyContent: 'space-between',
+    marginHorizontal: 0,
+  },
   doctorCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -281,6 +287,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(99, 102, 241, 0.08)',
     padding: 16,
     marginBottom: 16,
+    width: '48%',
     flexDirection: 'column',
     ...Platform.select({
       ios: {
