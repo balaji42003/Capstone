@@ -4,14 +4,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Dimensions,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Dimensions,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -19,45 +19,52 @@ const { width } = Dimensions.get('window');
 const HealthRecordsScreen = () => {
   const router = useRouter();
   const [userInfo, setUserInfo] = useState(null);
+  const [firebaseData, setFirebaseData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Sample readings data for graphs
-  const [vitalReadings] = useState({
+  // Real-time vital readings from Firebase
+  const [vitalReadings, setVitalReadings] = useState({
     temperature: {
-      current: 98.6,
+      current: 0,
       unit: '°F',
-      readings: [98.2, 98.4, 98.6, 98.5, 98.7, 98.6, 98.4],
-      times: ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM'],
-      status: 'Normal',
+      readings: [],
+      times: [],
+      status: 'Loading...',
       color: '#FF6B6B'
     },
     heartRate: {
-      current: 72,
+      current: 0,
       unit: 'BPM',
-      readings: [68, 70, 72, 74, 71, 72, 70],
-      times: ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM'],
-      status: 'Normal',
+      readings: [],
+      times: [],
+      status: 'Loading...',
       color: '#4ECDC4'
     },
     bloodPressure: {
       systolic: 120,
       diastolic: 80,
-      readings: [118, 119, 120, 122, 121, 120, 119],
-      times: ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM'],
+      readings: [],
+      times: [],
       status: 'Normal',
       color: '#45B7D1'
     },
-    spo2: {
-      current: 98,
+    humidity: {
+      current: 0,
       unit: '%',
-      readings: [97, 98, 98, 99, 98, 98, 97],
-      times: ['6AM', '8AM', '10AM', '12PM', '2PM', '4PM', '6PM'],
-      status: 'Excellent',
+      readings: [],
+      times: [],
+      status: 'Loading...',
       color: '#96CEB4'
     }
   });
 
   useEffect(() => {
     loadUserInfo();
+    fetchFirebaseData();
+    // Set up real-time listener
+    const interval = setInterval(fetchFirebaseData, 5000); // Update every 5 seconds
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadUserInfo = async () => {
@@ -69,6 +76,83 @@ const HealthRecordsScreen = () => {
     } catch (error) {
       console.error('Error loading user info:', error);
     }
+  };
+
+  // Fetch data from Firebase Realtime Database
+  const fetchFirebaseData = async () => {
+    try {
+      const response = await fetch('https://thanu-iot-default-rtdb.asia-southeast1.firebasedatabase.app/sensors.json');
+      const data = await response.json();
+      
+      if (data) {
+        console.log('Firebase data:', data);
+        setFirebaseData(data);
+        updateVitalReadings(data);
+      }
+    } catch (error) {
+      console.error('Error fetching Firebase data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update vital readings with Firebase data
+  const updateVitalReadings = (data) => {
+    const currentTime = new Date().toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false 
+    });
+
+    setVitalReadings(prev => ({
+      temperature: {
+        ...prev.temperature,
+        current: data.waterTempF || 0,
+        status: getTemperatureStatus(data.waterTempF),
+        readings: [...prev.temperature.readings.slice(-6), data.waterTempF || 0],
+        times: [...prev.temperature.times.slice(-6), currentTime]
+      },
+      heartRate: {
+        ...prev.heartRate,
+        current: data.BPM || 0,
+        status: getHeartRateStatus(data.BPM),
+        readings: [...prev.heartRate.readings.slice(-6), data.BPM || 0],
+        times: [...prev.heartRate.times.slice(-6), currentTime]
+      },
+      bloodPressure: {
+        ...prev.bloodPressure,
+        readings: [...prev.bloodPressure.readings.slice(-6), 120], // Keep static for now
+        times: [...prev.bloodPressure.times.slice(-6), currentTime]
+      },
+      humidity: {
+        ...prev.humidity,
+        current: data.humidity || 0,
+        status: getHumidityStatus(data.humidity),
+        readings: [...prev.humidity.readings.slice(-6), data.humidity || 0],
+        times: [...prev.humidity.times.slice(-6), currentTime]
+      }
+    }));
+  };
+
+  // Status determination functions
+  const getTemperatureStatus = (temp) => {
+    // Body temperature in Fahrenheit
+    if (temp < 97.0) return 'Low';      // Below normal body temp
+    if (temp > 100.4) return 'Fever';  // Fever range
+    if (temp > 99.5) return 'Elevated'; // Slightly elevated
+    return 'Normal';                     // Normal body temp range
+  };
+
+  const getHeartRateStatus = (bpm) => {
+    if (bpm < 60) return 'Low';
+    if (bpm > 100) return 'High';
+    return 'Normal';
+  };
+
+  const getHumidityStatus = (humidity) => {
+    if (humidity < 30) return 'Dry';
+    if (humidity > 70) return 'Humid';
+    return 'Normal';
   };
 
   const renderLineChart = (readings, color) => {
@@ -263,10 +347,26 @@ const HealthRecordsScreen = () => {
           <Text style={styles.headerSubtitle}>Real-time health analytics</Text>
         </View>
         
-        <TouchableOpacity style={styles.headerButton}>
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={fetchFirebaseData}
+        >
           <Ionicons name="refresh" size={24} color="white" />
         </TouchableOpacity>
       </LinearGradient>
+
+      {/* Firebase Connection Status */}
+      <View style={styles.connectionStatus}>
+        <View style={[styles.statusDot, { backgroundColor: firebaseData ? '#10B981' : '#EF4444' }]} />
+        <Text style={styles.statusText}>
+          {isLoading ? 'Connecting...' : firebaseData ? 'Live Data Connected' : 'Connection Lost'}
+        </Text>
+        {firebaseData && (
+          <Text style={styles.statusDetail}>
+            Last update: {new Date().toLocaleTimeString()}
+          </Text>
+        )}
+      </View>
 
       {/* Content */}
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -333,18 +433,18 @@ const HealthRecordsScreen = () => {
                   </View>
                 </View>
 
-                {/* Blood Oxygen - Bottom Right */}
+                {/* Humidity - Bottom Right */}
                 <View style={styles.vitalQuadrant}>
                   <View style={styles.quadrantHeader}>
-                    <MaterialIcons name="air" size={20} color={vitalReadings.spo2.color} />
-                    <Text style={styles.quadrantTitle}>Blood Oxygen</Text>
+                    <MaterialIcons name="water-drop" size={20} color={vitalReadings.humidity.color} />
+                    <Text style={styles.quadrantTitle}>Humidity</Text>
                   </View>
-                  <Text style={[styles.quadrantValue, { color: vitalReadings.spo2.color }]}>
-                    {vitalReadings.spo2.current}
+                  <Text style={[styles.quadrantValue, { color: vitalReadings.humidity.color }]}>
+                    {vitalReadings.humidity.current}
                   </Text>
-                  <Text style={styles.quadrantUnit}>{vitalReadings.spo2.unit}</Text>
+                  <Text style={styles.quadrantUnit}>{vitalReadings.humidity.unit}</Text>
                   <View style={styles.miniChart}>
-                    {renderCircularProgress(vitalReadings.spo2.current, 100, vitalReadings.spo2.color)}
+                    {renderCircularProgress(vitalReadings.humidity.current, 100, vitalReadings.humidity.color)}
                   </View>
                 </View>
               </View>
@@ -750,6 +850,33 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 30,
+  },
+  // Firebase Connection Status Styles
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  statusDetail: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 8,
   },
 });
 
