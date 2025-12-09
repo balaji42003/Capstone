@@ -1,20 +1,20 @@
-import React, { useState, useRef } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import React, { useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Platform,
+  Alert,
+  Animated,
   Dimensions,
   Image,
-  Alert,
-  Animated
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
@@ -40,10 +40,10 @@ const EyeConditionAnalyzer = () => {
   
   // API configuration with fallback URLs
   const API_URLS = [
-    'http://10.3.5.210:5005',  // Primary IP for eye disease detection
-    'http://192.168.1.100:5005', // Alternative common IP range
-    'http://localhost:5005',   // Localhost fallback
-    'http://127.0.0.1:5005'    // IP localhost fallback
+    'http://10.3.5.210:5000',  // Primary IP for eye disease detection
+    'http://192.168.1.100:5000', // Alternative common IP range
+    'http://localhost:5000',   // Localhost fallback
+    'http://127.0.0.1:5000'    // IP localhost fallback
   ];
 
   // Gemini API configuration

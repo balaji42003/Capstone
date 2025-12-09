@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Platform,
-  Dimensions,
-  Alert,
-  Image
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Dimensions,
+  Image,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
@@ -69,15 +69,12 @@ const SkinDiseaseDetector = () => {
   const [currentStep, setCurrentStep] = useState(1); // 1: Upload, 2: Analysis, 3: Results
   const [isConnected, setIsConnected] = useState(true);
 
-  // API configuration with fallback URLs
+  // API configuration - Using Android Emulator special IP for localhost
   const API_URLS = [
-    'http://10.3.5.210:5002',  // Primary IP
-    'http://192.168.1.100:5002', // Alternative common IP range
-    'http://localhost:5002',   // Localhost fallback
-    'http://127.0.0.1:5002'    // IP localhost fallback
+    'http://10.10.58.21:5002' // Changed to localhost only
   ];
 
-  const [currentApiUrl, setCurrentApiUrl] = useState(API_URLS[0]);
+  const [currentApiUrl, setCurrentApiUrl] = useState('http://10.10.58.21:5002');
 
   // Test connection on component mount
   useEffect(() => {
@@ -85,29 +82,29 @@ const SkinDiseaseDetector = () => {
   }, []);
 
   const testConnectionToAvailableServer = async () => {
-    for (const url of API_URLS) {
-      console.log(`Testing connection to: ${url}/status`);
-      try {
-        const response = await fetch(`${url}/status`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
-        
-        if (response.ok) {
-          console.log(`✅ Successfully connected to: ${url}`);
+    const url = 'http://10.10.58.21:5002';  // Changed to localhost
+    console.log(`Testing connection to: ${url}`);
+    try {
+      const response = await fetch(`${url}/`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.service === "Skin Disease Prediction API" && data.status === "Active") {
+          console.log(`✅ Connected to: ${url}`);
           setCurrentApiUrl(url);
           setIsConnected(true);
           return true;
         }
-      } catch (error) {
-        console.log(`❌ Failed to connect to: ${url}`);
-        console.log('Error:', error.message);
       }
+    } catch (error) {
+      console.log(`❌ Failed to connect: ${error.message}`);
     }
     
-    console.log('❌ No API servers are reachable');
     setIsConnected(false);
     return false;
   };
@@ -219,25 +216,23 @@ const SkinDiseaseDetector = () => {
 
   const testConnection = async () => {
     try {
-      console.log('Testing connection to:', `${currentApiUrl}/status`);
-      
-      const response = await fetch(`${currentApiUrl}/status`, {
+      const response = await fetch('http://10.10.58.21:5002', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
         },
       });
       
-      console.log('Connection response status:', response.status);
-      console.log('Connection response ok:', response.ok);
-      
       if (response.ok) {
         const data = await response.json();
-        console.log('Backend response:', data);
+        if (data.service === "Skin Disease Prediction API" && data.status === "Active") {
+          setIsConnected(true);
+          return true;
+        }
       }
       
-      setIsConnected(response.ok);
-      return response.ok;
+      setIsConnected(false);
+      return false;
     } catch (error) {
       console.log('Connection test failed:', error);
       console.log('Error details:', error.message);
@@ -263,24 +258,37 @@ const SkinDiseaseDetector = () => {
 
       // Create FormData for the API request
       const formData = new FormData();
+      
+      // Create proper file object with platform-specific URI handling
+      const fileUri = Platform.OS === 'android' ? selectedImage.uri : selectedImage.uri.replace('file://', '');
+      console.log('Processing image from URI:', fileUri);
+      
       formData.append('file', {
-        uri: selectedImage.uri,
-        name: 'skin_image.jpg',
+        uri: fileUri,
+        name: 'image.jpg',
         type: 'image/jpeg'
       });
 
-      console.log('Sending image URI:', selectedImage.uri);
       console.log('FormData created with file field');
       console.log('Making request to:', `${currentApiUrl}/predict`);
 
-      // Make API call to the skin disease detection server (matches your backend)
+      // Set up timeout and retry logic
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      // Make API call to the skin disease detection server
       const response = await fetch(`${currentApiUrl}/predict`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
         },
-        body: formData
+        body: formData,
+        signal: controller.signal
       });
+
+      // Clear timeout since request completed
+      clearTimeout(timeoutId);
 
       console.log('Response status:', response.status);
       console.log('Response ok:', response.ok);
@@ -288,7 +296,20 @@ const SkinDiseaseDetector = () => {
       if (!response.ok) {
         const errorText = await response.text();
         console.log('Error response:', errorText);
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        
+        // More descriptive error message based on status
+        let errorMessage = 'An error occurred while analyzing the image. ';
+        if (response.status === 413) {
+          errorMessage += 'The image file might be too large. Please try a smaller image.';
+        } else if (response.status === 415) {
+          errorMessage += 'The image format is not supported. Please try a JPEG or PNG image.';
+        } else if (response.status === 500) {
+          errorMessage += 'There was a problem processing the image. Please try again.';
+        } else {
+          errorMessage += `Server error (${response.status}): ${errorText}`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -320,12 +341,32 @@ const SkinDiseaseDetector = () => {
 
     } catch (error) {
       console.error('Analysis error:', error);
+      
+      // Handle specific error types
+      let errorMessage = '';
+      if (error.name === 'AbortError') {
+        errorMessage = 'The request took too long to complete. Please try again.';
+      } else if (error.message.includes('Network request failed')) {
+        errorMessage = 'Network connection error. Please check your internet connection.';
+      } else {
+        errorMessage = error.message;
+      }
+
       Alert.alert(
         'Analysis Failed', 
-        'Unable to analyze the image. Please check your internet connection and try again.\n\nError: ' + error.message,
+        errorMessage,
         [
-          { text: 'Retry', onPress: () => analyzeImage() },
-          { text: 'Cancel', style: 'cancel' }
+          { 
+            text: 'Retry', 
+            onPress: () => {
+              console.log('Retrying analysis...');
+              analyzeImage();
+            }
+          },
+          { 
+            text: 'Cancel', 
+            style: 'cancel' 
+          }
         ]
       );
     } finally {
