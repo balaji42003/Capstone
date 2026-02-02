@@ -1,7 +1,7 @@
-import { AntDesign, Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { AntDesign, Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -15,16 +15,17 @@ import {
   TextInput,
   TouchableOpacity,
   View
-} from 'react-native';
+} from "react-native";
+import { API_ENDPOINTS } from "../../config/api.config";
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
 try {
-  LinearGradient = require('expo-linear-gradient').LinearGradient;
+  LinearGradient = require("expo-linear-gradient").LinearGradient;
 } catch (e) {
   LinearGradient = ({ children, colors, style, ...props }) => (
-    <View 
-      style={[style, { backgroundColor: colors?.[0] || '#6366f1' }]} 
+    <View
+      style={[style, { backgroundColor: colors?.[0] || "#6366f1" }]}
       {...props}
     >
       {children}
@@ -32,27 +33,27 @@ try {
   );
 }
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 // Replace the problematic image imports with these corrected ones:
 
 // Replace with the exact filenames from your assets folder
-const bloodSugarMonitorImage = require('../../assets/images/blood-sugar-monitor.jpg');
-const breastCancerImage = require('../../assets/images/breast-cancer.png'); // Updated breast cancer image
-const eyeImage = require('../../assets/images/eye.jpg');
-const feverAndColdCheckerImage = require('../../assets/images/fever-cold-checker.jpg');
-const foodCalorieCheckerImage = require('../../assets/images/food-calorie-checker.jpg');
-const skinDiseaseDetectorImage = require('../../assets/images/skin-disease-detector.jpg');
-const sleepHealthCheckerImage = require('../../assets/images/sleep-health-checker.jpg');
-const dietNutritionPlannerImage = require('../../assets/images/diet-nutrition-planner.jpg'); // New diet planner image
+const bloodSugarMonitorImage = require("../../assets/images/blood-sugar-monitor.jpg");
+const breastCancerImage = require("../../assets/images/breast-cancer.png"); // Updated breast cancer image
+const eyeImage = require("../../assets/images/eye.jpg");
+const feverAndColdCheckerImage = require("../../assets/images/fever-cold-checker.jpg");
+const foodCalorieCheckerImage = require("../../assets/images/food-calorie-checker.jpg");
+const skinDiseaseDetectorImage = require("../../assets/images/skin-disease-detector.jpg");
+const sleepHealthCheckerImage = require("../../assets/images/sleep-health-checker.jpg");
+const dietNutritionPlannerImage = require("../../assets/images/diet-nutrition-planner.jpg"); // New diet planner image
 
 const HomeScreen = () => {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [showAllHealthServices, setShowAllHealthServices] = useState(false);
   const [showAllDoctors, setShowAllDoctors] = useState(false);
-  const [userName, setUserName] = useState('User');
+  const [userName, setUserName] = useState("User");
   const [userPhoto, setUserPhoto] = useState(null);
   const [doctorsData, setDoctorsData] = useState([]);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
@@ -64,29 +65,47 @@ const HomeScreen = () => {
 
   // Modified search submit to fetch doctors by specialty
   const handleSearchSubmit = async () => {
+    console.log("🔘 [TABS] SEARCH BUTTON CLICKED!");
+    console.log("[TABS] Current search query:", searchQuery);
+
     if (!searchQuery.trim()) {
+      console.log("❌ [TABS] Search query empty - resetting");
       setFilteredDoctors([]);
       setSearchActive(false);
+      setShowNoSpecialistFound(false);
       return;
     }
+
+    console.log("🔍 [TABS] Starting symptom search...");
+    console.log("📡 [TABS] Calling API:", API_ENDPOINTS.ML.DISEASE_PREDICTION);
+
     try {
       // Send symptoms to backend
-      const response = await fetch('http://10.2.8.64:5000/predict', {
-        method: 'POST',
+      const response = await fetch(API_ENDPOINTS.ML.DISEASE_PREDICTION, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ symptoms: searchQuery })
+        body: JSON.stringify({ symptoms: searchQuery }),
       });
+
+      console.log("✅ [TABS] API Response Status:", response.status);
       const data = await response.json();
+      console.log(
+        "📦 [TABS] API Response Data:",
+        JSON.stringify(data, null, 2),
+      );
+
       if (data.doctor_specialist) {
+        const recommendedSpecialist = data.doctor_specialist.trim();
+        console.log("🎯 [TABS] Recommended Specialist:", recommendedSpecialist);
+
         setLoadingDoctors(true);
-        const doctorsResponse = await fetch(
-          'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
-        );
+        console.log("📡 [TABS] Fetching doctors from Firebase...");
+        const doctorsResponse = await fetch(API_ENDPOINTS.FIREBASE.DOCTORS);
         const doctorsJson = await doctorsResponse.json();
         if (doctorsJson) {
-          const doctorsArray = Object.keys(doctorsJson).map(key => ({
+          const doctorsArray = Object.keys(doctorsJson).map((key) => ({
             id: key,
             ...doctorsJson[key],
             colors: generateDoctorColors(key),
@@ -95,39 +114,66 @@ const HomeScreen = () => {
             patients: `${(Math.random() * 3 + 1).toFixed(1)}K+`,
             nextAvailable: getNextAvailableTime(),
             isVerified: true,
-            specialty: (doctorsJson[key].specialization || doctorsJson[key].specialty || 'General Medicine').trim()
+            specialty: (
+              doctorsJson[key].specialization ||
+              doctorsJson[key].specialty ||
+              "General Medicine"
+            ).trim(),
           }));
+          console.log("👨‍⚕️ [TABS] Total doctors fetched:", doctorsArray.length);
+
           const specialist = data.doctor_specialist.trim().toLowerCase();
-          const filtered = doctorsArray.filter(doc =>
-            doc.specialty &&
-            doc.specialty.trim().toLowerCase() === specialist &&
-            doc.approvedAt && doc.approvedAt !== null
+          const filtered = doctorsArray.filter(
+            (doc) =>
+              doc.specialty &&
+              doc.specialty.trim().toLowerCase() === specialist &&
+              doc.approvedAt &&
+              doc.approvedAt !== null,
           );
+
+          console.log("✅ [TABS] Matching doctors found:", filtered.length);
+          console.log(
+            "📋 [TABS] Filtered doctors:",
+            filtered.map((d) => `${d.name} (${d.specialty})`),
+          );
+
           setFilteredDoctors(filtered);
-          setSearchActive(true); // <-- Set search active
+          setSearchActive(true);
+
           if (filtered.length === 0) {
+            console.log(
+              "⚠️ [TABS] No specialist found matching:",
+              recommendedSpecialist,
+            );
             setShowNoSpecialistFound(true);
           } else {
             setShowNoSpecialistFound(false);
           }
         } else {
+          console.log("❌ [TABS] No doctors data from Firebase");
           setFilteredDoctors([]);
           setShowNoSpecialistFound(true);
         }
         setLoadingDoctors(false);
       } else {
+        console.log("❌ [TABS] No doctor_specialist in API response");
         setFilteredDoctors([]);
         setShowNoSpecialistFound(true);
+        setSearchActive(true);
       }
     } catch (error) {
+      console.error("❌ [TABS] Error during search:", error);
+      console.error("[TABS] Error details:", error.message);
       setFilteredDoctors([]);
       setShowNoSpecialistFound(true);
+      setSearchActive(true);
     }
   };
 
   // Clear search and show all doctors
   const handleClearSearch = () => {
-    setSearchQuery('');
+    console.log("🔄 [TABS] Clearing search - resetting to all doctors");
+    setSearchQuery("");
     setFilteredDoctors([]);
     setShowNoSpecialistFound(false);
     setSearchActive(false);
@@ -135,20 +181,20 @@ const HomeScreen = () => {
 
   // Language cycling function
   const cycleLanguage = () => {
-    const languages = ['en', 'hi', 'te', 'ta'];
+    const languages = ["en", "hi", "te", "ta"];
     const currentIndex = languages.indexOf(selectedLanguage);
     const nextIndex = (currentIndex + 1) % languages.length;
     setSelectedLanguage(languages[nextIndex]);
   };
-  
+
   // Language display names
   const languageNames = {
-    en: 'EN',
-    hi: 'हिं',
-    te: 'తె',
-    ta: 'த'
+    en: "EN",
+    hi: "हिं",
+    te: "తె",
+    ta: "த",
   };
-  
+
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -159,14 +205,14 @@ const HomeScreen = () => {
     // Load user session data
     const loadUserData = async () => {
       try {
-        const userSession = await AsyncStorage.getItem('userSession');
+        const userSession = await AsyncStorage.getItem("userSession");
         if (userSession) {
           const userData = JSON.parse(userSession);
-          setUserName(userData.name || 'User');
+          setUserName(userData.name || "User");
           setUserPhoto(userData.photoURL || null);
         }
       } catch (error) {
-        console.error('Error loading user data:', error);
+        console.error("Error loading user data:", error);
       }
     };
 
@@ -174,18 +220,16 @@ const HomeScreen = () => {
     const loadDoctorsData = async () => {
       try {
         setLoadingDoctors(true);
-        console.log('Starting to load doctors from Firebase...');
-        
-        const response = await fetch(
-          'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/doctors.json'
-        );
+        console.log("[TABS] Starting to load doctors from Firebase...");
+
+        const response = await fetch(API_ENDPOINTS.FIREBASE.DOCTORS);
         const doctorsResponse = await response.json();
-        
-        console.log('Firebase response:', doctorsResponse);
-        
+
+        console.log("Firebase response:", doctorsResponse);
+
         if (doctorsResponse) {
           // Convert Firebase object to array with IDs
-          const doctorsArray = Object.keys(doctorsResponse).map(key => ({
+          const doctorsArray = Object.keys(doctorsResponse).map((key) => ({
             id: key,
             ...doctorsResponse[key],
             // Generate colors for UI
@@ -196,25 +240,28 @@ const HomeScreen = () => {
             nextAvailable: getNextAvailableTime(),
             isVerified: true,
             // Normalize specialty field
-            specialty: doctorsResponse[key].specialization || doctorsResponse[key].specialty || 'General Medicine'
+            specialty:
+              doctorsResponse[key].specialization ||
+              doctorsResponse[key].specialty ||
+              "General Medicine",
           }));
-          
-          console.log('All doctors before filtering:', doctorsArray);
-          
+
+          console.log("All doctors before filtering:", doctorsArray);
+
           // Filter only approved doctors (those with approvedAt field)
-          const approvedDoctors = doctorsArray.filter(doctor => 
-            doctor.approvedAt && doctor.approvedAt !== null
+          const approvedDoctors = doctorsArray.filter(
+            (doctor) => doctor.approvedAt && doctor.approvedAt !== null,
           );
-          
+
           setDoctorsData(approvedDoctors);
-          console.log('Loaded doctors:', approvedDoctors.length);
-          console.log('Doctor data sample:', approvedDoctors[0]);
+          console.log("Loaded doctors:", approvedDoctors.length);
+          console.log("Doctor data sample:", approvedDoctors[0]);
         } else {
-          console.log('No doctors data received from Firebase');
+          console.log("No doctors data received from Firebase");
           setDoctorsData([]);
         }
       } catch (error) {
-        console.error('Error loading doctors:', error);
+        console.error("Error loading doctors:", error);
         setDoctorsData([]);
       } finally {
         setLoadingDoctors(false);
@@ -266,7 +313,7 @@ const HomeScreen = () => {
       activeAppointments: "Active Appointments",
       findPharmacy: "Find Medicine",
       skinDisease: "Skin Problem\nDetector",
-      eyeCondition: "Eye Problem\nAnalyzer", 
+      eyeCondition: "Eye Problem\nAnalyzer",
       plateCalorie: "Food Calorie\nChecker",
       breastCancer: "Health Chat\nAssistant",
       feverFlu: "Fever & Cold\nChecker",
@@ -277,7 +324,7 @@ const HomeScreen = () => {
       bookNow: "Book Now",
       experience: "experience",
       availableToday: "Available Today",
-      languages: "Languages"
+      languages: "Languages",
     },
     hi: {
       greeting: "नमस्ते",
@@ -305,7 +352,7 @@ const HomeScreen = () => {
       bookNow: "बुक करें",
       experience: "अनुभव",
       availableToday: "आज उपलब्ध",
-      languages: "भाषाएं"
+      languages: "भाषाएं",
     },
     te: {
       greeting: "హలో",
@@ -333,7 +380,7 @@ const HomeScreen = () => {
       bookNow: "బుక్ చేయండి",
       experience: "అనుభవం",
       availableToday: "ఈరోజు అందుబాటులో",
-      languages: "భాషలు"
+      languages: "భాషలు",
     },
     ta: {
       greeting: "வணக்கம்",
@@ -361,8 +408,8 @@ const HomeScreen = () => {
       bookNow: "பதிவு செய்யுங்கள்",
       experience: "அனுபவம்",
       availableToday: "இன்று கிடைக்கும்",
-      languages: "மொழிகள்"
-    }
+      languages: "மொழிகள்",
+    },
   };
 
   const t = translations[selectedLanguage] || translations.en;
@@ -370,14 +417,14 @@ const HomeScreen = () => {
   // Helper functions for doctor data
   const generateDoctorColors = (id) => {
     const colorSets = [
-      ['#667eea', '#764ba2'],
-      ['#4ECDC4', '#44D8A8'],
-      ['#6C5CE7', '#A29BFE'],
-      ['#FF9A8B', '#A8E6CF'],
-      ['#FFD93D', '#6BCF7F'],
-      ['#A8E6CF', '#88D8C0'],
-      ['#fd746c', '#ff9068'],
-      ['#36d1dc', '#5b86e5']
+      ["#667eea", "#764ba2"],
+      ["#4ECDC4", "#44D8A8"],
+      ["#6C5CE7", "#A29BFE"],
+      ["#FF9A8B", "#A8E6CF"],
+      ["#FFD93D", "#6BCF7F"],
+      ["#A8E6CF", "#88D8C0"],
+      ["#fd746c", "#ff9068"],
+      ["#36d1dc", "#5b86e5"],
     ];
     const index = id.length % colorSets.length;
     return colorSets[index];
@@ -385,181 +432,181 @@ const HomeScreen = () => {
 
   const getNextAvailableTime = () => {
     const times = [
-      'Today 2:00 PM',
-      'Today 5:00 PM',
-      'Tomorrow 10 AM',
-      'Tomorrow 11 AM',
-      'Today 4:30 PM',
-      'Tomorrow 9 AM'
+      "Today 2:00 PM",
+      "Today 5:00 PM",
+      "Tomorrow 10 AM",
+      "Tomorrow 11 AM",
+      "Today 4:30 PM",
+      "Tomorrow 9 AM",
     ];
     return times[Math.floor(Math.random() * times.length)];
   };
 
   // Medical categories data - Simple and Visual for All Users
   const medicalCategories = [
-    { 
-      id: '1', 
-      title: t.skinDisease, 
-      icon: 'body-outline', 
-      color: ['#667eea', '#764ba2'],
-      route: '/health/SkinDiseaseDetector',
-      image: skinDiseaseDetectorImage
+    {
+      id: "1",
+      title: t.skinDisease,
+      icon: "body-outline",
+      color: ["#667eea", "#764ba2"],
+      route: "/health/SkinDiseaseDetector",
+      image: skinDiseaseDetectorImage,
     },
-    { 
-      id: '2', 
-      title: t.eyeCondition, 
-      icon: 'eye-outline', 
-      color: ['#f093fb', '#f5576c'],
-      route: '/health/EyeConditionAnalyzer', // Try this route instead
-      image: eyeImage
+    {
+      id: "2",
+      title: t.eyeCondition,
+      icon: "eye-outline",
+      color: ["#f093fb", "#f5576c"],
+      route: "/health/EyeConditionAnalyzer", // Try this route instead
+      image: eyeImage,
     },
-    { 
-      id: '3', 
-      title: t.plateCalorie, 
-      icon: 'restaurant-outline', 
-      color: ['#4facfe', '#00f2fe'],
-      route: '/health/PlateCalorieChecker',
-      image: foodCalorieCheckerImage
+    {
+      id: "3",
+      title: t.plateCalorie,
+      icon: "restaurant-outline",
+      color: ["#4facfe", "#00f2fe"],
+      route: "/health/PlateCalorieChecker",
+      image: foodCalorieCheckerImage,
     },
-    { 
-      id: '4', 
-      title: t.breastCancer, 
-      icon: 'chatbubbles-outline', 
-      color: ['#43e97b', '#38f9d7'],
-      route: '/health/BreastCancerRiskChatbot',
-      image: breastCancerImage // Now using the updated breast cancer image
+    {
+      id: "4",
+      title: t.breastCancer,
+      icon: "chatbubbles-outline",
+      color: ["#43e97b", "#38f9d7"],
+      route: "/health/BreastCancerRiskChatbot",
+      image: breastCancerImage, // Now using the updated breast cancer image
     },
-    { 
-      id: '5', 
-      title: t.feverFlu, 
-      icon: 'thermometer-outline', 
-      color: ['#fa709a', '#fee140'],
-      route: '/health/FeverFluSymptomChecker',
-      image: feverAndColdCheckerImage
+    {
+      id: "5",
+      title: t.feverFlu,
+      icon: "thermometer-outline",
+      color: ["#fa709a", "#fee140"],
+      route: "/health/FeverFluSymptomChecker",
+      image: feverAndColdCheckerImage,
     },
-    { 
-      id: '6', 
-      title: t.dietNutrition, 
-      icon: 'nutrition-outline', 
-      color: ['#a8edea', '#fed6e3'],
-      route: '/health/DailyDietNutritionPlanner',
-      image: dietNutritionPlannerImage // Now using the specific diet nutrition planner image
+    {
+      id: "6",
+      title: t.dietNutrition,
+      icon: "nutrition-outline",
+      color: ["#a8edea", "#fed6e3"],
+      route: "/health/DailyDietNutritionPlanner",
+      image: dietNutritionPlannerImage, // Now using the specific diet nutrition planner image
     },
-    { 
-      id: '7', 
-      title: t.sleepBedtime, 
-      icon: 'bed-outline', 
-      color: ['#d299c2', '#fef9d7'],
-      route: '/health/SmartSleepBedtimeCompanion',
-      image: sleepHealthCheckerImage
+    {
+      id: "7",
+      title: t.sleepBedtime,
+      icon: "bed-outline",
+      color: ["#d299c2", "#fef9d7"],
+      route: "/health/SmartSleepBedtimeCompanion",
+      image: sleepHealthCheckerImage,
     },
-    { 
-      id: '8', 
-      title: t.diabetesGlucose, 
-      icon: 'water-outline', 
-      color: ['#89f7fe', '#66a6ff'],
-      route: '/health/DiabetesGlucoseRiskMonitor',
-      image: bloodSugarMonitorImage
-    }
-  ];  
+    {
+      id: "8",
+      title: t.diabetesGlucose,
+      icon: "water-outline",
+      color: ["#89f7fe", "#66a6ff"],
+      route: "/health/DiabetesGlucoseRiskMonitor",
+      image: bloodSugarMonitorImage,
+    },
+  ];
 
   // Quick actions data - Visual and Simple
   const quickActions = [
-    { 
-      id: '1', 
-      title: t.bookAppointment, 
-      icon: 'calendar', 
-      colors: ['#6366f1', '#8b5cf6'],
-      bgColor: '#F0F0FF',
-      route: '/explore'
+    {
+      id: "1",
+      title: t.bookAppointment,
+      icon: "calendar",
+      colors: ["#6366f1", "#8b5cf6"],
+      bgColor: "#F0F0FF",
+      route: "/explore",
     },
-    { 
-      id: '2', 
-      title: t.healthRecords, 
-      icon: 'document-text', 
-      colors: ['#10b981', '#34d399'],
-      bgColor: '#F0FFF8',
-      route: '/health-records'
+    {
+      id: "2",
+      title: t.healthRecords,
+      icon: "document-text",
+      colors: ["#10b981", "#34d399"],
+      bgColor: "#F0FFF8",
+      route: "/health-records",
     },
-    { 
-      id: '3', 
-      title: t.activeAppointments, 
-      icon: 'calendar-outline', 
-      colors: ['#f59e0b', '#fbbf24'],
-      bgColor: '#FFFEF0',
-      route: '/active-appointments'
+    {
+      id: "3",
+      title: t.activeAppointments,
+      icon: "calendar-outline",
+      colors: ["#f59e0b", "#fbbf24"],
+      bgColor: "#FFFEF0",
+      route: "/active-appointments",
     },
-    { 
-      id: '4', 
-      title: t.findPharmacy, 
-      icon: 'medical', 
-      colors: ['#ef4444', '#f87171'],
-      bgColor: '#FFF0F0',
-      route: '/prescription-view'
+    {
+      id: "4",
+      title: t.findPharmacy,
+      icon: "medical",
+      colors: ["#ef4444", "#f87171"],
+      bgColor: "#FFF0F0",
+      route: "/prescription-view",
     },
-    { 
-      id: '5', 
-      title: 'Join Video Call', 
-      icon: 'videocam', 
-      colors: ['#4ECDC4', '#44D8A8'],
-      bgColor: '#F0FFF8',
-      route: '/join-video-call'
+    {
+      id: "5",
+      title: "Join Video Call",
+      icon: "videocam",
+      colors: ["#4ECDC4", "#44D8A8"],
+      bgColor: "#F0FFF8",
+      route: "/join-video-call",
     },
   ];
 
   // Health stats data - Simple numbers farmers can understand
   const healthStats = [
-    { 
-      id: '1', 
-      icon: 'heart', 
-      value: '86', 
-      label: 'Heart Rate', 
-      unit: 'BPM',
-      color: '#ef4444', 
-      bgColor: '#FFF0F0',
-      status: 'Normal'
+    {
+      id: "1",
+      icon: "heart",
+      value: "86",
+      label: "Heart Rate",
+      unit: "BPM",
+      color: "#ef4444",
+      bgColor: "#FFF0F0",
+      status: "Normal",
     },
-    { 
-      id: '2', 
-      icon: 'walk', 
-      value: '7,200', 
-      label: 'Steps Today', 
-      unit: 'steps',
-      color: '#10b981', 
-      bgColor: '#F0FFF8',
-      status: 'Good'
+    {
+      id: "2",
+      icon: "walk",
+      value: "7,200",
+      label: "Steps Today",
+      unit: "steps",
+      color: "#10b981",
+      bgColor: "#F0FFF8",
+      status: "Good",
     },
-    { 
-      id: '3', 
-      icon: 'moon', 
-      value: '8', 
-      label: 'Sleep Hours', 
-      unit: 'hours',
-      color: '#8b5cf6', 
-      bgColor: '#F8F0FF',
-      status: 'Good'
+    {
+      id: "3",
+      icon: "moon",
+      value: "8",
+      label: "Sleep Hours",
+      unit: "hours",
+      color: "#8b5cf6",
+      bgColor: "#F8F0FF",
+      status: "Good",
     },
-    { 
-      id: '4', 
-      icon: 'water', 
-      value: '2.1', 
-      label: 'Water Intake', 
-      unit: 'liters',
-      color: '#3b82f6', 
-      bgColor: '#F0F9FF',
-      status: 'Good'
+    {
+      id: "4",
+      icon: "water",
+      value: "2.1",
+      label: "Water Intake",
+      unit: "liters",
+      color: "#3b82f6",
+      bgColor: "#F0F9FF",
+      status: "Good",
     },
   ];
 
   const renderStatCard = ({ item }) => (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.statCard,
         {
           opacity: fadeAnim,
           transform: [{ scale: scaleAnim }],
-          backgroundColor: item.bgColor
-        }
+          backgroundColor: item.bgColor,
+        },
       ]}
     >
       <View style={[styles.statIconContainer, { backgroundColor: item.color }]}>
@@ -575,17 +622,17 @@ const HomeScreen = () => {
   );
 
   const renderQuickAction = (item, index) => (
-    <Animated.View 
+    <Animated.View
       key={item.id}
       style={[
         styles.quickActionCard,
         {
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }],
-        }
+        },
       ]}
     >
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.quickActionContent}
         onPress={() => {
           if (item.route) {
@@ -607,17 +654,17 @@ const HomeScreen = () => {
   );
 
   const renderCategoryCard = (item, index) => (
-    <Animated.View 
+    <Animated.View
       key={item.id}
       style={[
         styles.categoryCard,
         {
           opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }]
-        }
+          transform: [{ scale: scaleAnim }],
+        },
       ]}
     >
-      <TouchableOpacity 
+      <TouchableOpacity
         onPress={() => router.push(item.route)}
         style={styles.categoryCardContent}
       >
@@ -629,7 +676,7 @@ const HomeScreen = () => {
         >
           <Ionicons name={item.icon} size={28} color="white" />
         </LinearGradient>
-        
+
         <Text style={styles.categoryTitle} numberOfLines={2}>
           {item.title}
         </Text>
@@ -638,17 +685,17 @@ const HomeScreen = () => {
   );
 
   const renderCategoryCircle = (item, index) => (
-    <Animated.View 
+    <Animated.View
       key={item.id}
       style={[
         styles.categoryCircle,
         {
           opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }]
-        }
+          transform: [{ scale: scaleAnim }],
+        },
       ]}
     >
-      <TouchableOpacity 
+      <TouchableOpacity
         onPress={() => router.push(item.route)}
         style={styles.categoryCircleContent}
       >
@@ -660,7 +707,7 @@ const HomeScreen = () => {
         >
           <Ionicons name={item.icon} size={38} color="white" />
         </LinearGradient>
-        
+
         <Text style={styles.categoryCircleTitle} numberOfLines={2}>
           {item.title}
         </Text>
@@ -670,18 +717,18 @@ const HomeScreen = () => {
 
   // Regular doctor card (No pricing)
   const renderDoctorCard = ({ item, isGridView = false }) => (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.doctorCard,
         {
           opacity: fadeAnim,
           transform: [{ scale: scaleAnim }],
-          width: isGridView ? '100%' : width * 0.65,
+          width: isGridView ? "100%" : width * 0.65,
           marginRight: isGridView ? 0 : 12,
-        }
+        },
       ]}
     >
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.doctorCardContent}
         onPress={() => router.push(`/doctor-profile?doctorId=${item.id}`)}
       >
@@ -694,7 +741,7 @@ const HomeScreen = () => {
           >
             <Ionicons name="person" size={20} color="white" />
           </LinearGradient>
-          
+
           <View style={styles.doctorInfo}>
             <Text style={styles.doctorName}>{item.name}</Text>
             <Text style={styles.doctorSpecialty}>{item.specialty}</Text>
@@ -704,7 +751,7 @@ const HomeScreen = () => {
               <Text style={styles.experienceText}>• {item.experience}</Text>
             </View>
           </View>
-          
+
           {/* Online Status */}
           {item.isOnline && (
             <View style={styles.onlineStatusCard}>
@@ -713,8 +760,8 @@ const HomeScreen = () => {
             </View>
           )}
         </View>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={styles.viewDetailsButton}
           onPress={() => router.push(`/doctor-profile?doctorId=${item.id}`)}
         >
@@ -734,7 +781,7 @@ const HomeScreen = () => {
   // Circular doctor profile (like health services style)
   const renderCircleDoctorProfile = (item) => (
     <View style={styles.doctorCircleContainer}>
-      <TouchableOpacity 
+      <TouchableOpacity
         onPress={() => router.push(`/doctor-profile?doctorId=${item.id}`)}
         style={styles.doctorCircleContent}
       >
@@ -747,8 +794,8 @@ const HomeScreen = () => {
             end={{ x: 1, y: 1 }}
           >
             {item.photo ? (
-              <Image 
-                source={{ uri: item.photo }} 
+              <Image
+                source={{ uri: item.photo }}
                 style={styles.doctorCircleImage}
                 resizeMode="cover"
               />
@@ -756,14 +803,14 @@ const HomeScreen = () => {
               <Ionicons name="person" size={35} color="white" />
             )}
           </LinearGradient>
-          
+
           {/* Verified Badge - Top Right */}
           {item.isVerified && (
             <View style={styles.verifiedBadgeCircle}>
               <Ionicons name="checkmark-circle" size={16} color="#1DA1F2" />
             </View>
           )}
-          
+
           {/* Online Status Badge - Top Left */}
           {item.isOnline && (
             <View style={styles.onlineBadgeCircle}>
@@ -771,13 +818,13 @@ const HomeScreen = () => {
             </View>
           )}
         </View>
-        
+
         {/* Doctor Name and Specialty */}
         <Text style={styles.doctorNameOnly} numberOfLines={1}>
-          {item.name || 'Dr. Unknown'}
+          {item.name || "Dr. Unknown"}
         </Text>
         <Text style={styles.doctorSpecialtySmall} numberOfLines={1}>
-          {item.specialty || item.specialization || 'Specialist'}
+          {item.specialty || item.specialization || "Specialist"}
         </Text>
       </TouchableOpacity>
     </View>
@@ -786,31 +833,31 @@ const HomeScreen = () => {
   // Enhanced renderHealthServiceCard function for better image display:
 
   const renderHealthServiceCard = (item) => (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.naturalHealthCard,
         {
           opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }]
-        }
+          transform: [{ scale: scaleAnim }],
+        },
       ]}
     >
-      <TouchableOpacity 
+      <TouchableOpacity
         onPress={() => router.push(item.route)}
         style={styles.naturalCardContent}
         activeOpacity={0.9}
       >
         {/* Full Image Background - Medical Quality */}
         <View style={styles.naturalImageContainer}>
-          <Image 
-            source={item.image} 
+          <Image
+            source={item.image}
             style={styles.naturalServiceImage}
             resizeMode="cover"
           />
-          
+
           {/* Enhanced Overlay for Better Medical Look */}
           <LinearGradient
-            colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)']}
+            colors={["rgba(0,0,0,0.1)", "rgba(0,0,0,0.6)"]}
             style={styles.naturalOverlay}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
@@ -818,23 +865,23 @@ const HomeScreen = () => {
             {/* Medical Icon Badge with Service Color */}
             <View style={styles.medicalIconBadge}>
               <LinearGradient
-                colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.85)']}
+                colors={["rgba(255,255,255,0.95)", "rgba(255,255,255,0.85)"]}
                 style={styles.iconBadgeGradient}
               >
                 <Ionicons name={item.icon} size={28} color={item.color[0]} />
               </LinearGradient>
             </View>
-            
+
             {/* Service Title and Action */}
             <View style={styles.naturalTextContainer}>
               <Text style={styles.naturalTitle} numberOfLines={3}>
                 {item.title}
               </Text>
-              
+
               {/* Enhanced Action Indicator */}
               <View style={styles.analyzeIndicator}>
                 <LinearGradient
-                  colors={['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.6)']}
+                  colors={["rgba(0,0,0,0.8)", "rgba(0,0,0,0.6)"]}
                   style={styles.tapToAnalyze}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
@@ -854,16 +901,16 @@ const HomeScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       {/* Animated Header */}
-      <Animated.View 
+      <Animated.View
         style={[
           styles.headerContainer,
           {
-            transform: [{ translateY: headerAnim }]
-          }
+            transform: [{ translateY: headerAnim }],
+          },
         ]}
       >
         <LinearGradient
-          colors={['#4d4ae7ff', '#3b38d8ff']} // New medical teal gradient
+          colors={["#4d4ae7ff", "#3b38d8ff"]} // New medical teal gradient
           style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -874,36 +921,42 @@ const HomeScreen = () => {
               {/* User Profile Picture */}
               <View style={styles.profilePictureHeader}>
                 {userPhoto ? (
-                  <Image 
-                    source={{ uri: userPhoto }} 
+                  <Image
+                    source={{ uri: userPhoto }}
                     style={styles.userProfileImage}
                     resizeMode="cover"
                   />
                 ) : (
                   <LinearGradient
-                    colors={['#667eea', '#764ba2']}
+                    colors={["#667eea", "#764ba2"]}
                     style={styles.defaultProfileIcon}
                   >
                     <Ionicons name="person" size={24} color="white" />
                   </LinearGradient>
                 )}
               </View>
-              
+
               {/* User Name Only */}
               <Text style={styles.userNameHeader}>{userName}</Text>
             </View>
-            
+
             <View style={styles.headerActions}>
               {/* Language Selector */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.languageButton}
                 onPress={cycleLanguage}
               >
-                <Text style={styles.languageText}>{languageNames[selectedLanguage]}</Text>
+                <Text style={styles.languageText}>
+                  {languageNames[selectedLanguage]}
+                </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity style={styles.notificationButton}>
-                <Ionicons name="notifications-outline" size={20} color="white" />
+                <Ionicons
+                  name="notifications-outline"
+                  size={20}
+                  color="white"
+                />
                 <View style={styles.notificationDot} />
               </TouchableOpacity>
             </View>
@@ -913,7 +966,7 @@ const HomeScreen = () => {
 
       {/* Content */}
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <ScrollView 
+        <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
@@ -929,7 +982,7 @@ const HomeScreen = () => {
                 onSubmitEditing={handleSearchSubmit}
                 returnKeyType="search"
               />
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.filterButton}
                 onPress={searchActive ? handleClearSearch : handleSearchSubmit}
               >
@@ -949,15 +1002,15 @@ const HomeScreen = () => {
                 <Text style={styles.sectionTitle}>{t.topDoctors}</Text>
                 <Text style={styles.sectionSubtitle}>{t.availableToday}</Text>
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.seeAllButton}
-                onPress={() => router.push('/explore')}
+                onPress={() => router.push("/explore")}
               >
                 <Text style={styles.seeAllText}>{t.seeAll}</Text>
                 <AntDesign name="arrowright" size={16} color="#667eea" />
               </TouchableOpacity>
             </View>
-            
+
             {loadingDoctors ? (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>Loading doctors...</Text>
@@ -966,10 +1019,12 @@ const HomeScreen = () => {
               <>
                 {showNoSpecialistFound && (
                   <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No specialist found. Showing all doctors.</Text>
+                    <Text style={styles.emptyText}>
+                      No specialist found. Showing all doctors.
+                    </Text>
                   </View>
                 )}
-                {(filteredDoctors.length > 0 ? (
+                {filteredDoctors.length > 0 ? (
                   <FlatList
                     data={filteredDoctors}
                     renderItem={({ item }) => renderCircleDoctorProfile(item)}
@@ -995,7 +1050,7 @@ const HomeScreen = () => {
                     snapToInterval={96}
                     snapToAlignment="start"
                   />
-                ))}
+                )}
               </>
             )}
           </View>
@@ -1005,23 +1060,25 @@ const HomeScreen = () => {
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleContainer}>
                 <Text style={styles.sectionTitle}>{t.healthAnalysis}</Text>
-                <Text style={styles.sectionSubtitle}>AI-powered health screening</Text>
+                <Text style={styles.sectionSubtitle}>
+                  AI-powered health screening
+                </Text>
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.seeAllButton}
                 onPress={() => setShowAllHealthServices(!showAllHealthServices)}
               >
                 <Text style={styles.seeAllText}>
-                  {showAllHealthServices ? 'Show Less' : t.seeAll}
+                  {showAllHealthServices ? "Show Less" : t.seeAll}
                 </Text>
-                <AntDesign 
-                  name={showAllHealthServices ? "arrowup" : "arrowright"} 
-                  size={16} 
-                  color="#667eea" 
+                <AntDesign
+                  name={showAllHealthServices ? "arrowup" : "arrowright"}
+                  size={16}
+                  color="#667eea"
                 />
               </TouchableOpacity>
             </View>
-            
+
             {/* Health Services - Dynamic Display */}
             {!showAllHealthServices ? (
               // Original Horizontal Scroll
@@ -1031,55 +1088,69 @@ const HomeScreen = () => {
                 keyExtractor={(item) => item.id}
                 horizontal
                 showsHorizontalScrollIndicadtor={false}
-                contentContainerStyle={[styles.healthServicesContainer, { paddingLeft: 5, paddingRight: width * 0.06 + 20 }]} 
-                ItemSeparatorComponent={() => <View style={{ width: 32 }} />} 
+                contentContainerStyle={[
+                  styles.healthServicesContainer,
+                  { paddingLeft: 5, paddingRight: width * 0.06 + 20 },
+                ]}
+                ItemSeparatorComponent={() => <View style={{ width: 32 }} />}
                 decelerationRate="fast"
                 snapToInterval={width * 0.88 + 32}
                 snapToAlignment="start"
                 pagingEnabled={true}
-                getItemLayout={(_, index) => ({ length: width * 0.88 + 32, offset: (width * 0.88 + 32) * index, index })}
+                getItemLayout={(_, index) => ({
+                  length: width * 0.88 + 32,
+                  offset: (width * 0.88 + 32) * index,
+                  index,
+                })}
                 style={{ width: width }}
               />
             ) : (
               // Grid View for All Services
               <View style={styles.allHealthServicesGrid}>
                 {medicalCategories.map((item, index) => (
-                  <Animated.View 
+                  <Animated.View
                     key={item.id}
                     style={[
                       styles.gridHealthCard,
                       {
                         opacity: fadeAnim,
-                        transform: [{ scale: scaleAnim }]
-                      }
+                        transform: [{ scale: scaleAnim }],
+                      },
                     ]}
                   >
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       onPress={() => router.push(item.route)}
                       style={styles.gridCardContent}
                       activeOpacity={0.9}
                     >
                       <View style={styles.gridImageContainer}>
-                        <Image 
-                          source={item.image} 
+                        <Image
+                          source={item.image}
                           style={styles.gridServiceImage}
                           resizeMode="cover"
                         />
                         <LinearGradient
-                          colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.7)']}
+                          colors={["rgba(0,0,0,0.1)", "rgba(0,0,0,0.7)"]}
                           style={styles.gridOverlay}
                           start={{ x: 0, y: 0 }}
                           end={{ x: 0, y: 1 }}
                         >
                           <View style={styles.gridMedicalBadge}>
                             <LinearGradient
-                              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.85)']}
+                              colors={[
+                                "rgba(255,255,255,0.95)",
+                                "rgba(255,255,255,0.85)",
+                              ]}
                               style={styles.gridIconBadge}
                             >
-                              <Ionicons name={item.icon} size={24} color={item.color[0]} />
+                              <Ionicons
+                                name={item.icon}
+                                size={24}
+                                color={item.color[0]}
+                              />
                             </LinearGradient>
                           </View>
-                          
+
                           <View style={styles.gridTextContainer}>
                             <Text style={styles.gridTitle} numberOfLines={3}>
                               {item.title}
@@ -1089,9 +1160,19 @@ const HomeScreen = () => {
                                 colors={item.color}
                                 style={styles.gridActionButton}
                               >
-                                <Ionicons name="camera" size={14} color="white" />
-                                <Text style={styles.gridActionText}>Analyze</Text>
-                                <Ionicons name="arrow-forward" size={12} color="white" />
+                                <Ionicons
+                                  name="camera"
+                                  size={14}
+                                  color="white"
+                                />
+                                <Text style={styles.gridActionText}>
+                                  Analyze
+                                </Text>
+                                <Ionicons
+                                  name="arrow-forward"
+                                  size={12}
+                                  color="white"
+                                />
                               </LinearGradient>
                             </View>
                           </View>
@@ -1114,7 +1195,9 @@ const HomeScreen = () => {
               <AntDesign name="rocket1" size={24} color="#667eea" />
             </View>
             <View style={styles.quickActionsGrid}>
-              {quickActions.map((item, index) => renderQuickAction(item, index))}
+              {quickActions.map((item, index) =>
+                renderQuickAction(item, index),
+              )}
             </View>
           </View>
 
@@ -1130,10 +1213,10 @@ const styles = StyleSheet.create({
   // Container Styles
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: "#F9FAFB",
   },
   headerContainer: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
@@ -1141,19 +1224,19 @@ const styles = StyleSheet.create({
   },
   headerGradient: {
     height: 110,
-    paddingTop: Platform.OS === 'ios' ? 44 : 24,
+    paddingTop: Platform.OS === "ios" ? 44 : 24,
     paddingBottom: 16,
   },
   headerContent: {
     paddingHorizontal: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     flex: 1,
   },
   profileSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   profilePictureHeader: {
@@ -1161,12 +1244,12 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     marginRight: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: "rgba(255, 255, 255, 0.3)",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -1177,19 +1260,19 @@ const styles = StyleSheet.create({
     }),
   },
   userProfileImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   defaultProfileIcon: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
   },
   userNameHeader: {
     fontSize: 18,
-    color: 'white',
-    fontWeight: 'bold',
+    color: "white",
+    fontWeight: "bold",
     flex: 1,
   },
   greetingSection: {
@@ -1197,70 +1280,70 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 14,
-    color: 'white',
-    fontWeight: '600',
+    color: "white",
+    fontWeight: "600",
   },
   userName: {
     fontSize: 20,
-    color: 'white',
-    fontWeight: 'bold',
+    color: "white",
+    fontWeight: "bold",
   },
   subtitle: {
     fontSize: 12,
-    color: 'white',
+    color: "white",
     marginTop: 2,
   },
   headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   languageButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 14,
     minWidth: 44,
-    alignItems: 'center',
+    alignItems: "center",
   },
   languageText: {
-    color: 'white',
-    fontWeight: '600',
+    color: "white",
+    fontWeight: "600",
     fontSize: 12,
   },
   notificationButton: {
-    position: 'relative',
+    position: "relative",
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   notificationDot: {
-    position: 'absolute',
+    position: "absolute",
     top: 10,
     right: 10,
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#EF4444',
+    backgroundColor: "#EF4444",
     borderWidth: 2,
-    borderColor: 'white',
+    borderColor: "white",
   },
-  
+
   // Search Section
   searchSection: {
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 12,
     marginTop: 16,
     marginBottom: 24,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
@@ -1271,32 +1354,32 @@ const styles = StyleSheet.create({
     }),
   },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: "#E2E8F0",
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
     marginLeft: 10,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   filterButton: {
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#F1F5F9",
+    justifyContent: "center",
+    alignItems: "center",
     marginLeft: 6,
   },
-  
+
   // Content
   content: {
     flex: 1,
@@ -1310,9 +1393,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 18,
   },
   sectionTitleContainer: {
@@ -1320,45 +1403,45 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1E293B',
+    fontWeight: "bold",
+    color: "#1E293B",
     marginBottom: 2,
   },
   sectionSubtitle: {
     fontSize: 12,
-    color: '#64748b',
+    color: "#64748b",
     marginTop: 2,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
   seeAllText: {
     fontSize: 14,
-    color: '#667eea',
-    fontWeight: '600',
+    color: "#667eea",
+    fontWeight: "600",
   },
-  
+
   // Quick Actions
   quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     marginHorizontal: -6,
   },
   quickActionCard: {
     width: (width - 52) / 2,
     marginHorizontal: 6,
     marginBottom: 12,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
+    borderColor: "rgba(0, 0, 0, 0.04)",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
         shadowRadius: 4,
@@ -1370,18 +1453,18 @@ const styles = StyleSheet.create({
   },
   quickActionContent: {
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
   },
   quickActionIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 8,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
         shadowRadius: 4,
@@ -1393,17 +1476,17 @@ const styles = StyleSheet.create({
   },
   quickActionText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#1E293B',
-    textAlign: 'center',
+    fontWeight: "600",
+    color: "#1E293B",
+    textAlign: "center",
     lineHeight: 16,
   },
-  
+
   // Category Circles
   categoryCircleGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-around",
     marginHorizontal: -12,
     paddingVertical: 8,
   },
@@ -1411,20 +1494,20 @@ const styles = StyleSheet.create({
     width: (width - 80) / 2,
     marginHorizontal: 12,
     marginBottom: 24,
-    alignItems: 'center',
+    alignItems: "center",
   },
   categoryCircleContent: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   categoryCircleIcon: {
     width: 85,
     height: 85,
     borderRadius: 42.5,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.2,
         shadowRadius: 12,
@@ -1436,26 +1519,26 @@ const styles = StyleSheet.create({
   },
   categoryCircleTitle: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#1f2937',
-    textAlign: 'center',
+    fontWeight: "600",
+    color: "#1f2937",
+    textAlign: "center",
     lineHeight: 16,
     maxWidth: 90,
   },
-  
+
   // Regular Doctor Cards (fallback)
   doctorCard: {
     // Width is handled dynamically
   },
   doctorCardContent: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.08)',
+    borderColor: "rgba(99, 102, 241, 0.08)",
     ...Platform.select({
       ios: {
-        shadowColor: '#667eea',
+        shadowColor: "#667eea",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.12,
         shadowRadius: 12,
@@ -1466,16 +1549,16 @@ const styles = StyleSheet.create({
     }),
   },
   doctorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
   },
   doctorAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
   },
   doctorInfo: {
@@ -1483,69 +1566,69 @@ const styles = StyleSheet.create({
   },
   doctorName: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: '#1E293B',
+    fontWeight: "bold",
+    color: "#1E293B",
     marginBottom: 3,
   },
   doctorSpecialty: {
     fontSize: 12,
-    color: '#64748b',
+    color: "#64748b",
     marginBottom: 5,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   doctorRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   ratingText: {
     fontSize: 12,
-    color: '#1E293B',
+    color: "#1E293B",
     marginLeft: 4,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   priceContainer: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   doctorPrice: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: '#667eea',
+    fontWeight: "bold",
+    color: "#667eea",
   },
   bookButton: {
     borderRadius: 10,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginTop: 10,
   },
   bookButtonGradient: {
     paddingVertical: 10,
     paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   bookButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
-  
+
   bottomSpacing: {
     height: 30,
   },
-  
+
   // Instagram-style Doctor Profile Styles
   instagramDoctorCard: {
     marginBottom: 16,
   },
   instagramDoctorContent: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 16,
     padding: 12,
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.05)',
+    borderColor: "rgba(0, 0, 0, 0.05)",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.08,
         shadowRadius: 12,
@@ -1555,10 +1638,10 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  
+
   // Simple Profile Picture
   profilePictureContainer: {
-    position: 'relative',
+    position: "relative",
     marginBottom: 8,
   },
   storyRing: {
@@ -1566,46 +1649,46 @@ const styles = StyleSheet.create({
     height: 70,
     borderRadius: 35,
     padding: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   profilePictureWrapper: {
     width: 66,
     height: 66,
     borderRadius: 33,
-    backgroundColor: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 1,
   },
   profilePicture: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
   },
   doctorImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  
+
   // Simple Badges
   verifiedBadgeSimple: {
-    position: 'absolute',
+    position: "absolute",
     top: -2,
     right: -2,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 10,
     padding: 1,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: "#E2E8F0",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
         shadowRadius: 2,
@@ -1616,21 +1699,21 @@ const styles = StyleSheet.create({
     }),
   },
   ratingBadgeSimple: {
-    position: 'absolute',
+    position: "absolute",
     top: -2,
     left: -2,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 10,
     paddingHorizontal: 4,
     paddingVertical: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 2,
     borderWidth: 1,
-    borderColor: '#FFD700',
+    borderColor: "#FFD700",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.1,
         shadowRadius: 2,
@@ -1642,31 +1725,31 @@ const styles = StyleSheet.create({
   },
   ratingTextSimple: {
     fontSize: 9,
-    color: '#1E293B',
-    fontWeight: 'bold',
+    color: "#1E293B",
+    fontWeight: "bold",
   },
-  
+
   // Simple Doctor Info
   doctorInfoSimple: {
-    alignItems: 'center',
-    width: '100%',
+    alignItems: "center",
+    width: "100%",
   },
   doctorNameSimple: {
     fontSize: 13,
-    fontWeight: 'bold',
-    color: '#1E293B',
-    textAlign: 'center',
+    fontWeight: "bold",
+    color: "#1E293B",
+    textAlign: "center",
     lineHeight: 16,
   },
-  
+
   // Simple Grid Layout
   doctorsInstagramContainer: {
     paddingRight: 20,
   },
   allDoctorsInstagramGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     marginHorizontal: -8,
   },
   doctorInstagramGridItem: {
@@ -1674,17 +1757,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     marginBottom: 16,
   },
-  
+
   // Doctor Circle Profile (like health services style)
   doctorCircle: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 12,
-    overflow: 'hidden',
-    position: 'relative',
+    overflow: "hidden",
+    position: "relative",
   },
   doctorsHorizontalContainer: {
     paddingHorizontal: 16,
@@ -1692,30 +1775,30 @@ const styles = StyleSheet.create({
   },
   doctorCircleContainer: {
     width: 90,
-    alignItems: 'center',
+    alignItems: "center",
     marginHorizontal: 6,
   },
   doctorCircleContent: {
-    alignItems: 'center',
-    width: '100%',
+    alignItems: "center",
+    width: "100%",
   },
   profileCircleContainer: {
-    position: 'relative',
+    position: "relative",
     marginBottom: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   perfectCircleProfile: {
     width: 75,
     height: 75,
     borderRadius: 37.5, // Perfect circle
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 3,
-    borderColor: 'white',
+    borderColor: "white",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 8,
@@ -1726,17 +1809,17 @@ const styles = StyleSheet.create({
     }),
   },
   verifiedBadgeCircle: {
-    position: 'absolute',
+    position: "absolute",
     top: -2,
     right: -2,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 10,
     padding: 2,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 3,
@@ -1747,21 +1830,21 @@ const styles = StyleSheet.create({
     }),
   },
   ratingBadgeCircle: {
-    position: 'absolute',
+    position: "absolute",
     top: -2,
     left: -2,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 8,
     paddingHorizontal: 4,
     paddingVertical: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 2,
     borderWidth: 1,
-    borderColor: '#FFD700',
+    borderColor: "#FFD700",
     ...Platform.select({
       ios: {
-        shadowColor: '#FFD700',
+        shadowColor: "#FFD700",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 3,
@@ -1773,22 +1856,22 @@ const styles = StyleSheet.create({
   },
   ratingNumberCircle: {
     fontSize: 9,
-    color: '#1F2937',
-    fontWeight: 'bold',
+    color: "#1F2937",
+    fontWeight: "bold",
   },
   doctorNameOnly: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#1F2937',
-    textAlign: 'center',
+    fontWeight: "600",
+    color: "#1F2937",
+    textAlign: "center",
     lineHeight: 14,
     maxWidth: 85,
     marginBottom: 2,
   },
   doctorSpecialtySmall: {
     fontSize: 10,
-    color: '#64748B',
-    textAlign: 'center',
+    color: "#64748B",
+    textAlign: "center",
     lineHeight: 12,
     maxWidth: 85,
   },
@@ -1798,40 +1881,40 @@ const styles = StyleSheet.create({
     borderRadius: 34.5,
   },
   onlineBadgeCircle: {
-    position: 'absolute',
+    position: "absolute",
     top: -2,
     left: -2,
-    backgroundColor: '#22C55E',
+    backgroundColor: "#22C55E",
     borderRadius: 8,
     padding: 3,
     borderWidth: 2,
-    borderColor: 'white',
+    borderColor: "white",
   },
   onlineDotSmall: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'white',
+    backgroundColor: "white",
   },
   loadingContainer: {
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   loadingText: {
     fontSize: 14,
-    color: '#64748B',
-    fontStyle: 'italic',
+    color: "#64748B",
+    fontStyle: "italic",
   },
   emptyContainer: {
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     fontSize: 14,
-    color: '#64748B',
-    fontStyle: 'italic',
+    color: "#64748B",
+    fontStyle: "italic",
   },
-  
+
   // New styles for Health Service Card
   healthServicesContainer: {
     paddingHorizontal: 12,
@@ -1842,11 +1925,11 @@ const styles = StyleSheet.create({
     height: 240,
     marginHorizontal: 0,
     borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: '#fff',
+    overflow: "hidden",
+    backgroundColor: "#fff",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 12 },
         shadowOpacity: 0.2,
         shadowRadius: 20,
@@ -1857,45 +1940,45 @@ const styles = StyleSheet.create({
     }),
   },
   naturalCardContent: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   naturalImageContainer: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
+    width: "100%",
+    height: "100%",
+    position: "relative",
   },
   naturalServiceImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 24,
   },
   naturalOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.15)', // Minimal overlay
-    justifyContent: 'space-between',
+    backgroundColor: "rgba(0,0,0,0.15)", // Minimal overlay
+    justifyContent: "space-between",
     padding: 20,
     borderRadius: 24,
   },
   medicalIconBadge: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     marginTop: 8,
   },
   iconBadgeGradient: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: "rgba(255,255,255,0.3)",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 8,
@@ -1906,56 +1989,56 @@ const styles = StyleSheet.create({
     }),
   },
   naturalTextContainer: {
-    alignSelf: 'stretch',
-    alignItems: 'flex-start',
+    alignSelf: "stretch",
+    alignItems: "flex-start",
   },
   naturalTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: 'white',
-    textAlign: 'left',
+    fontWeight: "bold",
+    color: "white",
+    textAlign: "left",
     lineHeight: 26,
     marginBottom: 12,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowColor: "rgba(0, 0, 0, 0.5)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   analyzeIndicator: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   tapToAnalyze: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 25,
     gap: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: "rgba(255,255,255,0.2)",
   },
   tapText: {
-    color: 'white',
+    color: "white",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
-  
+
   // Grid styles for all health services view
   allHealthServicesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
   },
   gridHealthCard: {
-    width: '48%',
+    width: "48%",
     height: 200,
     borderRadius: 20,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 16,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.15,
         shadowRadius: 12,
@@ -1966,59 +2049,59 @@ const styles = StyleSheet.create({
     }),
   },
   gridCardContent: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   gridImageContainer: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
+    width: "100%",
+    height: "100%",
+    position: "relative",
   },
   gridServiceImage: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#F3F4F6',
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#F3F4F6",
   },
   gridOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
     padding: 16,
   },
   gridMedicalBadge: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   gridIconBadge: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
+    borderColor: "rgba(255,255,255,0.4)",
   },
   gridTextContainer: {
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
   },
   gridTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
     lineHeight: 20,
     marginBottom: 12,
-    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowColor: "rgba(0, 0, 0, 0.7)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
   gridActionContainer: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   gridActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
@@ -2026,58 +2109,58 @@ const styles = StyleSheet.create({
   },
   gridActionText: {
     fontSize: 12,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
-  
+
   // Online Status Styles
   onlineStatusCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.2)',
+    borderColor: "rgba(34, 197, 94, 0.2)",
   },
   onlineDotCard: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#22C55E',
+    backgroundColor: "#22C55E",
     marginRight: 4,
   },
   onlineTextCard: {
     fontSize: 10,
-    color: '#22C55E',
-    fontWeight: '600',
+    color: "#22C55E",
+    fontWeight: "600",
   },
-  
+
   // View Details Button Styles
   viewDetailsButton: {
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginTop: 12,
   },
   viewDetailsButtonGradient: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   viewDetailsButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 13,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
-  
+
   // Experience Text Style
   experienceText: {
     fontSize: 11,
-    color: '#64748B',
+    color: "#64748B",
     marginLeft: 4,
-    fontWeight: '500',
+    fontWeight: "500",
   },
 });
 

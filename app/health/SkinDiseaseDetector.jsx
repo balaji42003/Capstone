@@ -1,7 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -12,22 +12,26 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
-} from 'react-native';
+  View,
+} from "react-native";
+import { API_ENDPOINTS } from "../../config/api.config";
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
 try {
-  LinearGradient = require('expo-linear-gradient').LinearGradient;
+  LinearGradient = require("expo-linear-gradient").LinearGradient;
 } catch (e) {
   LinearGradient = ({ children, colors, style, ...props }) => (
-    <View style={[style, { backgroundColor: colors?.[0] || '#FF6B6B' }]} {...props}>
+    <View
+      style={[style, { backgroundColor: colors?.[0] || "#FF6B6B" }]}
+      {...props}
+    >
       {children}
     </View>
   );
 }
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 // Professional Header Component
 const Header = ({ title, gradient, onBack }) => (
@@ -45,16 +49,19 @@ const Header = ({ title, gradient, onBack }) => (
 // Professional Loading Component
 const LoadingComponent = ({ text }) => (
   <SafeAreaView style={styles.loadingContainer}>
-    <LinearGradient colors={['#FF6B6B', '#FF8E8E']} style={styles.loadingGradient}>
+    <LinearGradient
+      colors={["#FF6B6B", "#FF8E8E"]}
+      style={styles.loadingGradient}
+    >
       <View style={styles.loadingContent}>
         <View style={styles.loadingSpinner}>
           <Ionicons name="medical" size={60} color="white" />
         </View>
         <Text style={styles.loadingText}>{text}</Text>
         <View style={styles.loadingDots}>
-          <View style={[styles.dot, { animationDelay: '0ms' }]} />
-          <View style={[styles.dot, { animationDelay: '200ms' }]} />
-          <View style={[styles.dot, { animationDelay: '400ms' }]} />
+          <View style={[styles.dot, { animationDelay: "0ms" }]} />
+          <View style={[styles.dot, { animationDelay: "200ms" }]} />
+          <View style={[styles.dot, { animationDelay: "400ms" }]} />
         </View>
       </View>
     </LinearGradient>
@@ -69,12 +76,12 @@ const SkinDiseaseDetector = () => {
   const [currentStep, setCurrentStep] = useState(1); // 1: Upload, 2: Analysis, 3: Results
   const [isConnected, setIsConnected] = useState(true);
 
-  // API configuration - Using Android Emulator special IP for localhost
-  const API_URLS = [
-    'http://10.2.16.82:5002' // Changed to localhost only
-  ];
+  // API configuration - Using centralized config
+  const API_URLS = [API_ENDPOINTS.ML.SKIN_DISEASE_BASE];
 
-  const [currentApiUrl, setCurrentApiUrl] = useState('http://10.2.16.82:5002');
+  const [currentApiUrl, setCurrentApiUrl] = useState(
+    API_ENDPOINTS.ML.SKIN_DISEASE_BASE,
+  );
 
   // Test connection on component mount
   useEffect(() => {
@@ -82,19 +89,22 @@ const SkinDiseaseDetector = () => {
   }, []);
 
   const testConnectionToAvailableServer = async () => {
-    const url = 'http://10.2.16.82:5002';  // Changed to localhost
+    const url = API_ENDPOINTS.ML.SKIN_DISEASE_BASE;
     console.log(`Testing connection to: ${url}`);
     try {
-      const response = await fetch(`${url}/`, {
-        method: 'GET',
+      const response = await fetch(`${url}/status`, {
+        method: "GET",
         headers: {
-          'Accept': 'application/json',
+          Accept: "application/json",
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        if (data.service === "Skin Disease Prediction API" && data.status === "Active") {
+        if (
+          data.service === "Skin Disease Prediction API" &&
+          data.status === "Active"
+        ) {
           console.log(`✅ Connected to: ${url}`);
           setCurrentApiUrl(url);
           setIsConnected(true);
@@ -104,51 +114,55 @@ const SkinDiseaseDetector = () => {
     } catch (error) {
       console.log(`❌ Failed to connect: ${error.message}`);
     }
-    
+
     setIsConnected(false);
     return false;
   };
 
   const skinConditions = [
-    { name: 'Acne', confidence: 85, color: '#e74c3c', severity: 'Moderate' },
-    { name: 'Eczema', confidence: 12, color: '#f39c12', severity: 'Mild' },
-    { name: 'Melanoma Risk', confidence: 3, color: '#2ecc71', severity: 'Low' }
+    { name: "Acne", confidence: 85, color: "#e74c3c", severity: "Moderate" },
+    { name: "Eczema", confidence: 12, color: "#f39c12", severity: "Mild" },
+    { name: "Melanoma Risk", confidence: 3, color: "#2ecc71", severity: "Low" },
   ];
 
   const recommendations = [
     {
-      category: 'Immediate Care',
+      category: "Immediate Care",
       items: [
-        'Keep the affected area clean and dry',
-        'Avoid touching or picking at the skin',
-        'Use gentle, fragrance-free skincare products'
-      ]
+        "Keep the affected area clean and dry",
+        "Avoid touching or picking at the skin",
+        "Use gentle, fragrance-free skincare products",
+      ],
     },
     {
-      category: 'Treatment Options',
+      category: "Treatment Options",
       items: [
-        'Topical retinoids for acne treatment',
-        'Gentle exfoliation 2-3 times per week',
-        'Consider salicylic acid or benzoyl peroxide'
-      ]
+        "Topical retinoids for acne treatment",
+        "Gentle exfoliation 2-3 times per week",
+        "Consider salicylic acid or benzoyl peroxide",
+      ],
     },
     {
-      category: 'When to See a Doctor',
+      category: "When to See a Doctor",
       items: [
-        'If condition worsens or doesn\'t improve in 2 weeks',
-        'Signs of infection (pus, excessive redness, warmth)',
-        'Any changes in moles or unusual skin growths'
-      ]
-    }
+        "If condition worsens or doesn't improve in 2 weeks",
+        "Signs of infection (pus, excessive redness, warmth)",
+        "Any changes in moles or unusual skin growths",
+      ],
+    },
   ];
 
   const pickImageFromCamera = async () => {
     try {
       // Request camera permissions
-      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (cameraPermission.status !== 'granted') {
-        Alert.alert('Permission Denied', 'Sorry, we need camera permissions to take photos.');
+      const cameraPermission =
+        await ImagePicker.requestCameraPermissionsAsync();
+
+      if (cameraPermission.status !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Sorry, we need camera permissions to take photos.",
+        );
         return;
       }
 
@@ -162,23 +176,27 @@ const SkinDiseaseDetector = () => {
       if (!result.canceled && result.assets[0]) {
         setSelectedImage({
           uri: result.assets[0].uri,
-          source: 'camera'
+          source: "camera",
         });
         setCurrentStep(2);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
-      console.error('Camera error:', error);
+      Alert.alert("Error", "Failed to take photo. Please try again.");
+      console.error("Camera error:", error);
     }
   };
 
   const pickImageFromGallery = async () => {
     try {
       // Request media library permissions
-      const mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (mediaPermission.status !== 'granted') {
-        Alert.alert('Permission Denied', 'Sorry, we need gallery permissions to select photos.');
+      const mediaPermission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (mediaPermission.status !== "granted") {
+        Alert.alert(
+          "Permission Denied",
+          "Sorry, we need gallery permissions to select photos.",
+        );
         return;
       }
 
@@ -192,50 +210,49 @@ const SkinDiseaseDetector = () => {
       if (!result.canceled && result.assets[0]) {
         setSelectedImage({
           uri: result.assets[0].uri,
-          source: 'gallery'
+          source: "gallery",
         });
         setCurrentStep(2);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to select image. Please try again.');
-      console.error('Gallery error:', error);
+      Alert.alert("Error", "Failed to select image. Please try again.");
+      console.error("Gallery error:", error);
     }
   };
 
   const showImagePicker = () => {
-    Alert.alert(
-      'Select Image Source',
-      'Choose how you want to add the image',
-      [
-        { text: 'Camera', onPress: pickImageFromCamera },
-        { text: 'Gallery', onPress: pickImageFromGallery },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
+    Alert.alert("Select Image Source", "Choose how you want to add the image", [
+      { text: "Camera", onPress: pickImageFromCamera },
+      { text: "Gallery", onPress: pickImageFromGallery },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const testConnection = async () => {
     try {
-      const response = await fetch('http://10.2.16.82:5002', {
-        method: 'GET',
+      const response = await fetch(API_ENDPOINTS.ML.SKIN_DISEASE_BASE, {
+        method: "GET",
         headers: {
-          'Accept': 'application/json',
+          Accept: "application/json",
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        if (data.service === "Skin Disease Prediction API" && data.status === "Active") {
+        if (
+          data.service === "Skin Disease Prediction API" &&
+          data.status === "Active"
+        ) {
           setIsConnected(true);
           return true;
         }
       }
-      
+
       setIsConnected(false);
       return false;
     } catch (error) {
-      console.log('Connection test failed:', error);
-      console.log('Error details:', error.message);
+      console.log("Connection test failed:", error);
+      console.log("Error details:", error.message);
       setIsConnected(false);
       return false;
     }
@@ -243,132 +260,102 @@ const SkinDiseaseDetector = () => {
 
   const analyzeImage = async () => {
     if (!selectedImage?.uri) {
-      Alert.alert('Error', 'No image selected for analysis.');
+      Alert.alert("Error", "No image selected for analysis.");
       return;
     }
 
+    console.log("🔬 Starting image analysis...");
     setIsAnalyzing(true);
 
     try {
-      // Test connection first
-      const connectionOk = await testConnection();
-      if (!connectionOk) {
-        throw new Error('Unable to connect to analysis server. Please check your internet connection.');
-      }
-
-      // Create FormData for the API request
+      // Create FormData
       const formData = new FormData();
-      
-      // Create proper file object with platform-specific URI handling
-      const fileUri = Platform.OS === 'android' ? selectedImage.uri : selectedImage.uri.replace('file://', '');
-      console.log('Processing image from URI:', fileUri);
-      
-      formData.append('file', {
+
+      const fileUri =
+        Platform.OS === "android"
+          ? selectedImage.uri
+          : selectedImage.uri.replace("file://", "");
+
+      console.log("📸 Image URI:", fileUri);
+
+      // Append file with key name "file"
+      formData.append("file", {
         uri: fileUri,
-        name: 'image.jpg',
-        type: 'image/jpeg'
+        name: "image.jpg",
+        type: "image/jpeg",
       });
 
-      console.log('FormData created with file field');
-      console.log('Making request to:', `${currentApiUrl}/predict`);
+      console.log("📡 Calling API:", API_ENDPOINTS.ML.SKIN_DISEASE_PREDICT);
 
-      // Set up timeout and retry logic
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-      // Make API call to the skin disease detection server
-      const response = await fetch(`${currentApiUrl}/predict`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
-        },
+      // Make simple API call
+      const response = await fetch(API_ENDPOINTS.ML.SKIN_DISEASE_PREDICT, {
+        method: "POST",
         body: formData,
-        signal: controller.signal
       });
 
-      // Clear timeout since request completed
-      clearTimeout(timeoutId);
-
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
+      console.log("✅ Response Status:", response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log('Error response:', errorText);
-        
-        // More descriptive error message based on status
-        let errorMessage = 'An error occurred while analyzing the image. ';
-        if (response.status === 413) {
-          errorMessage += 'The image file might be too large. Please try a smaller image.';
-        } else if (response.status === 415) {
-          errorMessage += 'The image format is not supported. Please try a JPEG or PNG image.';
-        } else if (response.status === 500) {
-          errorMessage += 'There was a problem processing the image. Please try again.';
-        } else {
-          errorMessage += `Server error (${response.status}): ${errorText}`;
-        }
-        
-        throw new Error(errorMessage);
+        console.error("❌ Error response:", errorText);
+        throw new Error(`Server error: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('Prediction response:', data);
-      console.log('Prediction:', data.prediction);
-      console.log('Confidence:', data.confidence_percentage);
+      console.log("📦 Prediction data:", data);
+      console.log("🎯 Prediction:", data.prediction);
+      console.log("📊 Confidence:", data.confidence_percentage);
 
       // Parse confidence_percentage (e.g., "92.00%") to number
-      const percent = typeof data.confidence_percentage === 'string'
-        ? parseFloat(data.confidence_percentage.replace('%', ''))
-        : data.confidence_percentage;
+      const percent =
+        typeof data.confidence_percentage === "string"
+          ? parseFloat(data.confidence_percentage.replace("%", ""))
+          : data.confidence_percentage;
 
       // Process the API response and update the analysis result
       const processedResult = {
         primaryCondition: {
-          name: data.prediction || 'Unknown Condition',
+          name: data.prediction || "Unknown Condition",
           confidence: Math.round(percent || 0),
           color: getConditionColor(data.prediction),
-          severity: getSeverityLevel(percent)
+          severity: getSeverityLevel(percent),
         },
         confidence: Math.round(percent || 0),
         recommendations: getRecommendationsForCondition(data.prediction),
         riskLevel: getRiskLevel(percent),
-        accuracy: Math.round(percent || 0)
+        accuracy: Math.round(percent || 0),
       };
 
       setAnalysisResult(processedResult);
       setCurrentStep(3);
-
     } catch (error) {
-      console.error('Analysis error:', error);
-      
+      console.error("Analysis error:", error);
+
       // Handle specific error types
-      let errorMessage = '';
-      if (error.name === 'AbortError') {
-        errorMessage = 'The request took too long to complete. Please try again.';
-      } else if (error.message.includes('Network request failed')) {
-        errorMessage = 'Network connection error. Please check your internet connection.';
+      let errorMessage = "";
+      if (error.name === "AbortError") {
+        errorMessage =
+          "The request took too long to complete. Please try again.";
+      } else if (error.message.includes("Network request failed")) {
+        errorMessage =
+          "Network connection error. Please check your internet connection.";
       } else {
         errorMessage = error.message;
       }
 
-      Alert.alert(
-        'Analysis Failed', 
-        errorMessage,
-        [
-          { 
-            text: 'Retry', 
-            onPress: () => {
-              console.log('Retrying analysis...');
-              analyzeImage();
-            }
+      Alert.alert("Analysis Failed", errorMessage, [
+        {
+          text: "Retry",
+          onPress: () => {
+            console.log("Retrying analysis...");
+            analyzeImage();
           },
-          { 
-            text: 'Cancel', 
-            style: 'cancel' 
-          }
-        ]
-      );
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]);
     } finally {
       setIsAnalyzing(false);
     }
@@ -377,71 +364,73 @@ const SkinDiseaseDetector = () => {
   // Helper functions for processing API response
   const getConditionColor = (condition) => {
     const colorMap = {
-      'acne': '#6366f1',
-      'eczema': '#818cf8',
-      'melanoma': '#3730a3',
-      'psoriasis': '#a5b4fc',
-      'normal': '#6366f1',
-      'rosacea': '#818cf8'
+      acne: "#6366f1",
+      eczema: "#818cf8",
+      melanoma: "#3730a3",
+      psoriasis: "#a5b4fc",
+      normal: "#6366f1",
+      rosacea: "#818cf8",
     };
-    return colorMap[condition?.toLowerCase()] || '#6366f1';
+    return colorMap[condition?.toLowerCase()] || "#6366f1";
   };
 
   const getSeverityLevel = (confidence) => {
-    if (confidence >= 80) return 'High';
-    if (confidence >= 60) return 'Moderate';
-    if (confidence >= 40) return 'Mild';
-    return 'Low';
+    if (confidence >= 80) return "High";
+    if (confidence >= 60) return "Moderate";
+    if (confidence >= 40) return "Mild";
+    return "Low";
   };
 
   const getRiskLevel = (confidence) => {
-    if (confidence >= 80) return 'High';
-    if (confidence >= 60) return 'Moderate';
-    return 'Low';
+    if (confidence >= 80) return "High";
+    if (confidence >= 60) return "Moderate";
+    return "Low";
   };
 
   const getRecommendationsForCondition = (condition) => {
     const conditionRecommendations = {
-      'acne': [
+      acne: [
         {
-          category: 'Immediate Care',
+          category: "Immediate Care",
           items: [
-            'Keep the affected area clean and dry',
-            'Avoid touching or picking at the skin',
-            'Use gentle, non-comedogenic skincare products'
-          ]
+            "Keep the affected area clean and dry",
+            "Avoid touching or picking at the skin",
+            "Use gentle, non-comedogenic skincare products",
+          ],
         },
         {
-          category: 'Treatment Options',
+          category: "Treatment Options",
           items: [
-            'Consider topical retinoids for acne treatment',
-            'Gentle exfoliation 2-3 times per week',
-            'Use salicylic acid or benzoyl peroxide products'
-          ]
-        }
+            "Consider topical retinoids for acne treatment",
+            "Gentle exfoliation 2-3 times per week",
+            "Use salicylic acid or benzoyl peroxide products",
+          ],
+        },
       ],
-      'eczema': [
+      eczema: [
         {
-          category: 'Immediate Care',
+          category: "Immediate Care",
           items: [
-            'Keep skin moisturized with fragrance-free creams',
-            'Avoid known triggers and irritants',
-            'Use gentle, hypoallergenic products'
-          ]
+            "Keep skin moisturized with fragrance-free creams",
+            "Avoid known triggers and irritants",
+            "Use gentle, hypoallergenic products",
+          ],
         },
         {
-          category: 'Treatment Options',
+          category: "Treatment Options",
           items: [
-            'Apply topical corticosteroids as directed',
-            'Consider antihistamines for itching',
-            'Use lukewarm water for bathing'
-          ]
-        }
+            "Apply topical corticosteroids as directed",
+            "Consider antihistamines for itching",
+            "Use lukewarm water for bathing",
+          ],
+        },
       ],
-      'default': recommendations
+      default: recommendations,
     };
 
-    return conditionRecommendations[condition?.toLowerCase()] || recommendations;
+    return (
+      conditionRecommendations[condition?.toLowerCase()] || recommendations
+    );
   };
 
   const resetAnalysis = () => {
@@ -456,9 +445,9 @@ const SkinDiseaseDetector = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header 
-        title="Skin Disease Detector" 
-        gradient={['#6366f1', '#818cf8']}
+      <Header
+        title="Skin Disease Detector"
+        gradient={["#6366f1", "#818cf8"]}
         onBack={() => router.back()}
       />
 
@@ -468,32 +457,52 @@ const SkinDiseaseDetector = () => {
           <View style={styles.uploadSection}>
             <View style={styles.instructionCard}>
               <Ionicons name="information-circle" size={32} color="#FF6B6B" />
-              <Text style={styles.instructionTitle}>How to Get Best Results</Text>
+              <Text style={styles.instructionTitle}>
+                How to Get Best Results
+              </Text>
               <View style={styles.instructionList}>
                 <View style={styles.instructionItem}>
                   <Ionicons name="checkmark-circle" size={16} color="#2ecc71" />
-                  <Text style={styles.instructionText}>Take photo in good lighting</Text>
+                  <Text style={styles.instructionText}>
+                    Take photo in good lighting
+                  </Text>
                 </View>
                 <View style={styles.instructionItem}>
                   <Ionicons name="checkmark-circle" size={16} color="#2ecc71" />
-                  <Text style={styles.instructionText}>Keep camera steady and focused</Text>
+                  <Text style={styles.instructionText}>
+                    Keep camera steady and focused
+                  </Text>
                 </View>
                 <View style={styles.instructionItem}>
                   <Ionicons name="checkmark-circle" size={16} color="#2ecc71" />
-                  <Text style={styles.instructionText}>Show the affected area clearly</Text>
+                  <Text style={styles.instructionText}>
+                    Show the affected area clearly
+                  </Text>
                 </View>
                 <View style={styles.instructionItem}>
                   <Ionicons name="checkmark-circle" size={16} color="#2ecc71" />
-                  <Text style={styles.instructionText}>Include surrounding healthy skin</Text>
+                  <Text style={styles.instructionText}>
+                    Include surrounding healthy skin
+                  </Text>
                 </View>
               </View>
             </View>
 
-            <TouchableOpacity style={styles.uploadButton} onPress={showImagePicker}>
-            <LinearGradient colors={['#6366f1', '#818cf8']} style={styles.uploadGradient}>
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={showImagePicker}
+            >
+              <LinearGradient
+                colors={["#6366f1", "#818cf8"]}
+                style={styles.uploadGradient}
+              >
                 <Ionicons name="camera" size={40} color="white" />
-                <Text style={styles.uploadText}>Take Photo or Select Image</Text>
-                <Text style={styles.uploadSubtext}>Tap to capture or choose from gallery</Text>
+                <Text style={styles.uploadText}>
+                  Take Photo or Select Image
+                </Text>
+                <Text style={styles.uploadSubtext}>
+                  Tap to capture or choose from gallery
+                </Text>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -501,19 +510,30 @@ const SkinDiseaseDetector = () => {
               <Ionicons name="shield-checkmark" size={24} color="#6366f1" />
               <View style={styles.disclaimerContent}>
                 <Text style={styles.disclaimerText}>
-                  This AI analysis is for informational purposes only and should not replace professional medical diagnosis.
+                  This AI analysis is for informational purposes only and should
+                  not replace professional medical diagnosis.
                 </Text>
                 <View style={styles.connectionStatus}>
-                  <Ionicons 
-                    name={isConnected ? "checkmark-circle" : "alert-circle"} 
-                    size={16} 
-                    color={isConnected ? "#6366f1" : "#e74c3c"} 
+                  <Ionicons
+                    name={isConnected ? "checkmark-circle" : "alert-circle"}
+                    size={16}
+                    color={isConnected ? "#6366f1" : "#e74c3c"}
                   />
-                  <Text style={[styles.connectionText, { color: isConnected ? "#6366f1" : "#e74c3c" }]}>
-                    {isConnected ? `AI Server Connected (${currentApiUrl})` : "Connection Issue"}
+                  <Text
+                    style={[
+                      styles.connectionText,
+                      { color: isConnected ? "#6366f1" : "#e74c3c" },
+                    ]}
+                  >
+                    {isConnected
+                      ? `AI Server Connected (${currentApiUrl})`
+                      : "Connection Issue"}
                   </Text>
                 </View>
-                <TouchableOpacity style={styles.testButton} onPress={testConnectionToAvailableServer}>
+                <TouchableOpacity
+                  style={styles.testButton}
+                  onPress={testConnectionToAvailableServer}
+                >
                   <Ionicons name="refresh" size={16} color="#6366f1" />
                   <Text style={styles.testButtonText}>Test Connection</Text>
                 </TouchableOpacity>
@@ -529,22 +549,26 @@ const SkinDiseaseDetector = () => {
               <Text style={styles.imageCardTitle}>Selected Image</Text>
               <View style={styles.imageContainer}>
                 {selectedImage?.uri ? (
-                  <Image 
-                    source={{ uri: selectedImage.uri }} 
+                  <Image
+                    source={{ uri: selectedImage.uri }}
                     style={styles.selectedImage}
                     resizeMode="cover"
                   />
                 ) : (
                   <View style={styles.imagePlaceholder}>
                     <Ionicons name="image" size={60} color="#FF6B6B" />
-                    <Text style={styles.imagePlaceholderText}>Skin Sample Image</Text>
+                    <Text style={styles.imagePlaceholderText}>
+                      Skin Sample Image
+                    </Text>
                   </View>
                 )}
               </View>
               <View style={styles.imageInfo}>
                 <View style={styles.imageInfoItem}>
                   <Ionicons name="camera" size={16} color="#7F8C8D" />
-                  <Text style={styles.imageInfoText}>Source: {selectedImage.source}</Text>
+                  <Text style={styles.imageInfoText}>
+                    Source: {selectedImage.source}
+                  </Text>
                 </View>
                 <View style={styles.imageInfoItem}>
                   <Ionicons name="checkmark-circle" size={16} color="#2ecc71" />
@@ -560,30 +584,45 @@ const SkinDiseaseDetector = () => {
                   <View style={styles.stepNumber}>
                     <Text style={styles.stepNumberText}>1</Text>
                   </View>
-                  <Text style={styles.stepText}>Image preprocessing and enhancement</Text>
+                  <Text style={styles.stepText}>
+                    Image preprocessing and enhancement
+                  </Text>
                 </View>
                 <View style={styles.analysisStep}>
                   <View style={styles.stepNumber}>
                     <Text style={styles.stepNumberText}>2</Text>
                   </View>
-                  <Text style={styles.stepText}>Feature extraction using CNN</Text>
+                  <Text style={styles.stepText}>
+                    Feature extraction using CNN
+                  </Text>
                 </View>
                 <View style={styles.analysisStep}>
                   <View style={styles.stepNumber}>
                     <Text style={styles.stepNumberText}>3</Text>
                   </View>
-                  <Text style={styles.stepText}>Pattern matching with database</Text>
+                  <Text style={styles.stepText}>
+                    Pattern matching with database
+                  </Text>
                 </View>
               </View>
             </View>
 
             <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.retakeButton} onPress={resetAnalysis}>
+              <TouchableOpacity
+                style={styles.retakeButton}
+                onPress={resetAnalysis}
+              >
                 <Text style={styles.retakeText}>Retake Photo</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.analyzeButton} onPress={analyzeImage}>
-                <LinearGradient colors={['#6366f1', '#818cf8']} style={styles.analyzeGradient}>
+
+              <TouchableOpacity
+                style={styles.analyzeButton}
+                onPress={analyzeImage}
+              >
+                <LinearGradient
+                  colors={["#6366f1", "#818cf8"]}
+                  style={styles.analyzeGradient}
+                >
                   <Ionicons name="scan" size={20} color="white" />
                   <Text style={styles.analyzeText}>Analyze Image</Text>
                 </LinearGradient>
@@ -596,10 +635,15 @@ const SkinDiseaseDetector = () => {
           // Step 3: Analysis Results
           <View style={styles.resultsSection}>
             <View style={styles.resultHeader}>
-              <LinearGradient colors={['#6366f1', '#818cf8']} style={styles.resultHeaderGradient}>
+              <LinearGradient
+                colors={["#6366f1", "#818cf8"]}
+                style={styles.resultHeaderGradient}
+              >
                 <Ionicons name="analytics" size={32} color="white" />
                 <Text style={styles.resultHeaderTitle}>Analysis Complete</Text>
-                <Text style={styles.resultHeaderSubtitle}>AI Confidence: {analysisResult.accuracy}%</Text>
+                <Text style={styles.resultHeaderSubtitle}>
+                  AI Confidence: {analysisResult.accuracy}%
+                </Text>
               </LinearGradient>
             </View>
 
@@ -608,24 +652,35 @@ const SkinDiseaseDetector = () => {
               <Text style={styles.diagnosisTitle}>Primary Diagnosis</Text>
               <View style={styles.diagnosisMain}>
                 <View style={styles.diagnosisIcon}>
-                  <Ionicons name="medical" size={32} color={analysisResult.primaryCondition.color || '#6366f1'} />
+                  <Ionicons
+                    name="medical"
+                    size={32}
+                    color={analysisResult.primaryCondition.color || "#6366f1"}
+                  />
                 </View>
                 <View style={styles.diagnosisInfo}>
-                  <Text style={styles.conditionName}>{analysisResult.primaryCondition.name}</Text>
-                  <Text style={styles.conditionSeverity}>Severity: {analysisResult.primaryCondition.severity}</Text>
+                  <Text style={styles.conditionName}>
+                    {analysisResult.primaryCondition.name}
+                  </Text>
+                  <Text style={styles.conditionSeverity}>
+                    Severity: {analysisResult.primaryCondition.severity}
+                  </Text>
                   <View style={styles.confidenceBar}>
                     <View style={styles.confidenceBarBg}>
-                      <View 
+                      <View
                         style={[
-                          styles.confidenceBarFill, 
-                          { 
+                          styles.confidenceBarFill,
+                          {
                             width: `${analysisResult.primaryCondition.confidence}%`,
-                            backgroundColor: analysisResult.primaryCondition.color 
-                          }
-                        ]} 
+                            backgroundColor:
+                              analysisResult.primaryCondition.color,
+                          },
+                        ]}
                       />
                     </View>
-                    <Text style={styles.confidenceText}>{analysisResult.primaryCondition.confidence}% confidence</Text>
+                    <Text style={styles.confidenceText}>
+                      {analysisResult.primaryCondition.confidence}% confidence
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -633,19 +688,30 @@ const SkinDiseaseDetector = () => {
 
             {/* Other Possible Conditions */}
             <View style={styles.otherConditionsCard}>
-              <Text style={styles.otherConditionsTitle}>Other Possible Conditions</Text>
+              <Text style={styles.otherConditionsTitle}>
+                Other Possible Conditions
+              </Text>
               {skinConditions.slice(1).map((condition, index) => (
                 <View key={index} style={styles.conditionItem}>
-                  <View style={[styles.conditionDot, { backgroundColor: condition.color }]} />
+                  <View
+                    style={[
+                      styles.conditionDot,
+                      { backgroundColor: condition.color },
+                    ]}
+                  />
                   <Text style={styles.conditionItemName}>{condition.name}</Text>
-                  <Text style={styles.conditionItemConfidence}>{condition.confidence}%</Text>
+                  <Text style={styles.conditionItemConfidence}>
+                    {condition.confidence}%
+                  </Text>
                 </View>
               ))}
             </View>
 
             {/* Recommendations */}
             <View style={styles.recommendationsCard}>
-              <Text style={styles.recommendationsTitle}>Professional Recommendations</Text>
+              <Text style={styles.recommendationsTitle}>
+                Professional Recommendations
+              </Text>
               {recommendations.map((category, index) => (
                 <View key={index} style={styles.recommendationCategory}>
                   <Text style={styles.categoryTitle}>{category.category}</Text>
@@ -665,7 +731,9 @@ const SkinDiseaseDetector = () => {
               <View style={styles.warningContent}>
                 <Text style={styles.warningTitle}>Important Notice</Text>
                 <Text style={styles.warningText}>
-                  This AI analysis is a screening tool only. Please consult a dermatologist for proper diagnosis and treatment, especially for any concerning changes in your skin.
+                  This AI analysis is a screening tool only. Please consult a
+                  dermatologist for proper diagnosis and treatment, especially
+                  for any concerning changes in your skin.
                 </Text>
               </View>
             </View>
@@ -673,14 +741,23 @@ const SkinDiseaseDetector = () => {
             {/* Action Buttons */}
             <View style={styles.finalActions}>
               <TouchableOpacity style={styles.saveButton}>
-              <LinearGradient colors={['#6366f1', '#3730a3']} style={styles.saveGradient}>
+                <LinearGradient
+                  colors={["#6366f1", "#3730a3"]}
+                  style={styles.saveGradient}
+                >
                   <Ionicons name="bookmark" size={20} color="white" />
                   <Text style={styles.saveText}>Save Report</Text>
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.newAnalysisButton} onPress={resetAnalysis}>
-              <LinearGradient colors={['#6366f1', '#818cf8']} style={styles.newAnalysisGradient}>
+              <TouchableOpacity
+                style={styles.newAnalysisButton}
+                onPress={resetAnalysis}
+              >
+                <LinearGradient
+                  colors={["#6366f1", "#818cf8"]}
+                  style={styles.newAnalysisGradient}
+                >
                   <Ionicons name="refresh" size={20} color="white" />
                   <Text style={styles.newAnalysisText}>New Analysis</Text>
                 </LinearGradient>
@@ -698,30 +775,30 @@ const SkinDiseaseDetector = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 44 : 24,
+    paddingTop: Platform.OS === "ios" ? 44 : 24,
     paddingBottom: 16,
   },
   headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   placeholder: {
     width: 40,
@@ -734,14 +811,14 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   instructionCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 24,
     borderRadius: 16,
     marginBottom: 20,
-    alignItems: 'center',
+    alignItems: "center",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
@@ -753,32 +830,32 @@ const styles = StyleSheet.create({
   },
   instructionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: "bold",
+    color: "#2C3E50",
     marginTop: 12,
     marginBottom: 16,
   },
   instructionList: {
-    width: '100%',
+    width: "100%",
   },
   instructionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
     gap: 12,
   },
   instructionText: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
     flex: 1,
   },
   uploadButton: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 20,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
@@ -790,28 +867,28 @@ const styles = StyleSheet.create({
   },
   uploadGradient: {
     padding: 32,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 8,
   },
   uploadText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   uploadSubtext: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: "rgba(255, 255, 255, 0.8)",
   },
   disclaimerCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 20,
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 16,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
@@ -826,48 +903,48 @@ const styles = StyleSheet.create({
   },
   disclaimerText: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
     lineHeight: 18,
     marginBottom: 8,
   },
   connectionStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   connectionText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     marginTop: 8,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#6366f1',
-    backgroundColor: 'rgba(99, 102, 241, 0.1)',
-    alignSelf: 'flex-start',
+    borderColor: "#6366f1",
+    backgroundColor: "rgba(99, 102, 241, 0.1)",
+    alignSelf: "flex-start",
   },
   testButtonText: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#6366f1',
+    fontWeight: "600",
+    color: "#6366f1",
   },
   previewSection: {
     marginTop: 20,
   },
   imageCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 24,
     borderRadius: 16,
     marginBottom: 20,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
@@ -879,12 +956,12 @@ const styles = StyleSheet.create({
   },
   imageCardTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: "bold",
+    color: "#2C3E50",
     marginBottom: 16,
   },
   imageContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 16,
   },
   selectedImage: {
@@ -892,44 +969,44 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#E8F4FD',
+    borderColor: "#E8F4FD",
   },
   imagePlaceholder: {
     width: 200,
     height: 200,
     borderRadius: 12,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
     borderWidth: 2,
-    borderColor: '#E8F4FD',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: "#E8F4FD",
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 8,
   },
   imagePlaceholderText: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
   },
   imageInfo: {
     gap: 8,
   },
   imageInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   imageInfoText: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
   },
   analysisInfo: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 24,
     borderRadius: 16,
     marginBottom: 20,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
@@ -941,38 +1018,38 @@ const styles = StyleSheet.create({
   },
   analysisTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: "bold",
+    color: "#2C3E50",
     marginBottom: 16,
   },
   analysisSteps: {
     gap: 12,
   },
   analysisStep: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
   },
   stepNumber: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#6366f1',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#6366f1",
+    justifyContent: "center",
+    alignItems: "center",
   },
   stepNumberText: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   stepText: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
     flex: 1,
   },
   actionButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     marginBottom: 20,
   },
@@ -981,42 +1058,42 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#6366f1',
-    alignItems: 'center',
-    backgroundColor: 'white',
+    borderColor: "#6366f1",
+    alignItems: "center",
+    backgroundColor: "white",
   },
   retakeText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#6366f1',
+    fontWeight: "600",
+    color: "#6366f1",
   },
   analyzeButton: {
     flex: 2,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   analyzeGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 16,
     gap: 8,
   },
   analyzeText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   resultsSection: {
     marginTop: 20,
   },
   resultHeader: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 20,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
@@ -1028,26 +1105,26 @@ const styles = StyleSheet.create({
   },
   resultHeaderGradient: {
     padding: 24,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 8,
   },
   resultHeaderTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   resultHeaderSubtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: "rgba(255, 255, 255, 0.8)",
   },
   diagnosisCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 24,
     borderRadius: 16,
     marginBottom: 16,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
@@ -1059,34 +1136,34 @@ const styles = StyleSheet.create({
   },
   diagnosisTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: "bold",
+    color: "#2C3E50",
     marginBottom: 16,
   },
   diagnosisMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
   },
   diagnosisIcon: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#F8FAFC",
+    justifyContent: "center",
+    alignItems: "center",
   },
   diagnosisInfo: {
     flex: 1,
   },
   conditionName: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: "bold",
+    color: "#2C3E50",
   },
   conditionSeverity: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
     marginVertical: 4,
   },
   confidenceBar: {
@@ -1094,27 +1171,27 @@ const styles = StyleSheet.create({
   },
   confidenceBarBg: {
     height: 6,
-    backgroundColor: '#E8F4FD',
+    backgroundColor: "#E8F4FD",
     borderRadius: 3,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   confidenceBarFill: {
-    height: '100%',
+    height: "100%",
     borderRadius: 3,
   },
   confidenceText: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
     marginTop: 4,
   },
   otherConditionsCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 24,
     borderRadius: 16,
     marginBottom: 16,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
@@ -1126,13 +1203,13 @@ const styles = StyleSheet.create({
   },
   otherConditionsTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: "bold",
+    color: "#2C3E50",
     marginBottom: 16,
   },
   conditionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
     gap: 12,
   },
@@ -1143,22 +1220,22 @@ const styles = StyleSheet.create({
   },
   conditionItemName: {
     fontSize: 14,
-    color: '#2C3E50',
+    color: "#2C3E50",
     flex: 1,
   },
   conditionItemConfidence: {
     fontSize: 14,
-    color: '#7F8C8D',
-    fontWeight: '600',
+    color: "#7F8C8D",
+    fontWeight: "600",
   },
   recommendationsCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 24,
     borderRadius: 16,
     marginBottom: 16,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 8,
@@ -1170,8 +1247,8 @@ const styles = StyleSheet.create({
   },
   recommendationsTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: "bold",
+    color: "#2C3E50",
     marginBottom: 20,
   },
   recommendationCategory: {
@@ -1179,31 +1256,31 @@ const styles = StyleSheet.create({
   },
   categoryTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#6366f1',
+    fontWeight: "bold",
+    color: "#6366f1",
     marginBottom: 12,
   },
   recommendationItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginBottom: 8,
     gap: 10,
   },
   recommendationText: {
     fontSize: 14,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
     flex: 1,
     lineHeight: 20,
   },
   warningCard: {
-    backgroundColor: '#FFF5F5',
+    backgroundColor: "#FFF5F5",
     padding: 20,
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 16,
     borderLeftWidth: 4,
-    borderLeftColor: '#e74c3c',
+    borderLeftColor: "#e74c3c",
     marginBottom: 20,
   },
   warningContent: {
@@ -1211,52 +1288,52 @@ const styles = StyleSheet.create({
   },
   warningTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#e74c3c',
+    fontWeight: "bold",
+    color: "#e74c3c",
     marginBottom: 4,
   },
   warningText: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: "#7F8C8D",
     lineHeight: 18,
   },
   finalActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   saveButton: {
     flex: 1,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   saveGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 16,
     gap: 8,
   },
   saveText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   newAnalysisButton: {
     flex: 1,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   newAnalysisGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 16,
     gap: 8,
   },
   newAnalysisText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   bottomSpacing: {
     height: 24,
@@ -1267,38 +1344,38 @@ const styles = StyleSheet.create({
   },
   loadingGradient: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 40,
   },
   loadingContent: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   loadingSpinner: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 30,
   },
   loadingText: {
     fontSize: 18,
-    color: 'white',
-    textAlign: 'center',
+    color: "white",
+    textAlign: "center",
     marginBottom: 30,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   loadingDots: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     opacity: 0.3,
   },
 });

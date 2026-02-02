@@ -1,7 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,16 +13,20 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
+  View,
+} from "react-native";
+import { API_ENDPOINTS } from "../../config/api.config";
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
 try {
-  LinearGradient = require('expo-linear-gradient').LinearGradient;
+  LinearGradient = require("expo-linear-gradient").LinearGradient;
 } catch (e) {
   LinearGradient = ({ children, colors, style, ...props }) => (
-    <View style={[style, { backgroundColor: colors?.[0] || '#667eea' }]} {...props}>
+    <View
+      style={[style, { backgroundColor: colors?.[0] || "#667eea" }]}
+      {...props}
+    >
       {children}
     </View>
   );
@@ -32,18 +36,18 @@ const ProfileScreen = () => {
   const router = useRouter();
   const [userSession, setUserSession] = useState(null);
   const [userDetails, setUserDetails] = useState({
-    phone: '',
-    address: '',
-    dateOfBirth: '',
-    gender: '',
-    emergencyContact: '',
-    bloodGroup: '',
-    medicalHistory: '',
-    allergies: '',
-    occupation: '',
-    maritalStatus: '',
-    weight: '',
-    height: ''
+    phone: "",
+    address: "",
+    dateOfBirth: "",
+    gender: "",
+    emergencyContact: "",
+    bloodGroup: "",
+    medicalHistory: "",
+    allergies: "",
+    occupation: "",
+    maritalStatus: "",
+    weight: "",
+    height: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -55,18 +59,18 @@ const ProfileScreen = () => {
   const loadUserData = async () => {
     try {
       setIsLoading(true);
-      
+
       // Get user session
-      const sessionData = await AsyncStorage.getItem('userSession');
+      const sessionData = await AsyncStorage.getItem("userSession");
       if (sessionData) {
         const session = JSON.parse(sessionData);
         setUserSession(session);
-        
+
         // Load user details from Firebase
         await loadUserDetails(session.uid);
       }
     } catch (error) {
-      console.error('Error loading user data:', error);
+      console.error("Error loading user data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -74,70 +78,69 @@ const ProfileScreen = () => {
 
   const loadUserDetails = async (userId) => {
     try {
-      const firebaseUrl = 'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app';
-      const response = await fetch(`${firebaseUrl}/user-details/${userId}.json`);
+      const response = await fetch(
+        API_ENDPOINTS.FIREBASE.USER_DETAILS_BY_ID(userId),
+      );
       const details = await response.json();
-      
+
       if (details) {
         setUserDetails(details);
       }
     } catch (error) {
-      console.error('Error loading user details:', error);
+      console.error("Error loading user details:", error);
     }
   };
 
   const saveUserDetails = async () => {
     if (!userSession) return;
-    
+
     try {
       setIsLoading(true);
-      
-      const firebaseUrl = 'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app';
+
       const detailsToSave = {
         ...userDetails,
         updatedAt: new Date().toISOString(),
         userId: userSession.uid,
         userEmail: userSession.email,
         userName: userSession.name,
-        userType: userSession.userType
+        userType: userSession.userType,
       };
-      
-      const response = await fetch(`${firebaseUrl}/user-details/${userSession.uid}.json`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(detailsToSave)
-      });
-      
+
+      const response = await fetch(
+        API_ENDPOINTS.FIREBASE.USER_DETAILS_BY_ID(userSession.uid),
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(detailsToSave),
+        },
+      );
+
       if (response.ok) {
-        Alert.alert('Success', 'Profile updated successfully!');
+        Alert.alert("Success", "Profile updated successfully!");
         setIsEditing(false);
       } else {
-        throw new Error('Failed to save details');
+        throw new Error("Failed to save details");
       }
     } catch (error) {
-      console.error('Error saving user details:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      console.error("Error saving user details:", error);
+      Alert.alert("Error", "Failed to update profile. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            await AsyncStorage.removeItem('userSession');
-            router.replace('/landing');
-          }
-        }
-      ]
-    );
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          await AsyncStorage.removeItem("userSession");
+          router.replace("/landing");
+        },
+      },
+    ]);
   };
 
   if (isLoading && !userSession) {
@@ -153,9 +156,9 @@ const ProfileScreen = () => {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>No user session found</Text>
-        <TouchableOpacity 
-          style={styles.loginButton} 
-          onPress={() => router.replace('/landing')}
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={() => router.replace("/landing")}
         >
           <Text style={styles.loginButtonText}>Go to Login</Text>
         </TouchableOpacity>
@@ -167,14 +170,14 @@ const ProfileScreen = () => {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
         {/* Header */}
-        <LinearGradient
-          colors={['#667eea', '#764ba2']}
-          style={styles.header}
-        >
+        <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
           <View style={styles.profileHeader}>
             <View style={styles.avatarContainer}>
               {userSession.photoURL ? (
-                <Image source={{ uri: userSession.photoURL }} style={styles.avatar} />
+                <Image
+                  source={{ uri: userSession.photoURL }}
+                  style={styles.avatar}
+                />
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Ionicons name="person" size={40} color="white" />
@@ -184,7 +187,7 @@ const ProfileScreen = () => {
             <Text style={styles.userName}>{userSession.name}</Text>
             <Text style={styles.userEmail}>{userSession.email}</Text>
             <Text style={styles.userType}>
-              {userSession.userType === 'patient' ? 'Patient' : 'Doctor'}
+              {userSession.userType === "patient" ? "Patient" : "Doctor"}
             </Text>
           </View>
         </LinearGradient>
@@ -193,17 +196,17 @@ const ProfileScreen = () => {
         <View style={styles.detailsContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Profile Details</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.editButton}
               onPress={() => setIsEditing(!isEditing)}
             >
-              <Ionicons 
-                name={isEditing ? "close" : "pencil"} 
-                size={20} 
-                color="#667eea" 
+              <Ionicons
+                name={isEditing ? "close" : "pencil"}
+                size={20}
+                color="#667eea"
               />
               <Text style={styles.editButtonText}>
-                {isEditing ? 'Cancel' : 'Edit'}
+                {isEditing ? "Cancel" : "Edit"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -217,7 +220,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="Enter your phone number"
                 value={userDetails.phone}
-                onChangeText={(text) => setUserDetails({...userDetails, phone: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, phone: text })
+                }
                 editable={isEditing}
                 keyboardType="phone-pad"
               />
@@ -233,7 +238,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="Enter your address"
                 value={userDetails.address}
-                onChangeText={(text) => setUserDetails({...userDetails, address: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, address: text })
+                }
                 editable={isEditing}
                 multiline
               />
@@ -249,7 +256,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="DD/MM/YYYY"
                 value={userDetails.dateOfBirth}
-                onChangeText={(text) => setUserDetails({...userDetails, dateOfBirth: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, dateOfBirth: text })
+                }
                 editable={isEditing}
               />
             </View>
@@ -264,7 +273,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="Male/Female/Other"
                 value={userDetails.gender}
-                onChangeText={(text) => setUserDetails({...userDetails, gender: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, gender: text })
+                }
                 editable={isEditing}
               />
             </View>
@@ -280,7 +291,9 @@ const ProfileScreen = () => {
                   style={[styles.input, !isEditing && styles.inputDisabled]}
                   placeholder="70"
                   value={userDetails.weight}
-                  onChangeText={(text) => setUserDetails({...userDetails, weight: text})}
+                  onChangeText={(text) =>
+                    setUserDetails({ ...userDetails, weight: text })
+                  }
                   editable={isEditing}
                   keyboardType="numeric"
                 />
@@ -295,7 +308,9 @@ const ProfileScreen = () => {
                   style={[styles.input, !isEditing && styles.inputDisabled]}
                   placeholder="170"
                   value={userDetails.height}
-                  onChangeText={(text) => setUserDetails({...userDetails, height: text})}
+                  onChangeText={(text) =>
+                    setUserDetails({ ...userDetails, height: text })
+                  }
                   editable={isEditing}
                   keyboardType="numeric"
                 />
@@ -312,7 +327,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="Emergency contact number"
                 value={userDetails.emergencyContact}
-                onChangeText={(text) => setUserDetails({...userDetails, emergencyContact: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, emergencyContact: text })
+                }
                 editable={isEditing}
                 keyboardType="phone-pad"
               />
@@ -328,7 +345,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="A+, B+, O+, etc."
                 value={userDetails.bloodGroup}
-                onChangeText={(text) => setUserDetails({...userDetails, bloodGroup: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, bloodGroup: text })
+                }
                 editable={isEditing}
               />
             </View>
@@ -343,7 +362,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="Your occupation"
                 value={userDetails.occupation}
-                onChangeText={(text) => setUserDetails({...userDetails, occupation: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, occupation: text })
+                }
                 editable={isEditing}
               />
             </View>
@@ -358,7 +379,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="Single/Married/Other"
                 value={userDetails.maritalStatus}
-                onChangeText={(text) => setUserDetails({...userDetails, maritalStatus: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, maritalStatus: text })
+                }
                 editable={isEditing}
               />
             </View>
@@ -373,7 +396,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="Any medical conditions or history"
                 value={userDetails.medicalHistory}
-                onChangeText={(text) => setUserDetails({...userDetails, medicalHistory: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, medicalHistory: text })
+                }
                 editable={isEditing}
                 multiline
                 numberOfLines={3}
@@ -390,7 +415,9 @@ const ProfileScreen = () => {
                 style={[styles.input, !isEditing && styles.inputDisabled]}
                 placeholder="Any known allergies"
                 value={userDetails.allergies}
-                onChangeText={(text) => setUserDetails({...userDetails, allergies: text})}
+                onChangeText={(text) =>
+                  setUserDetails({ ...userDetails, allergies: text })
+                }
                 editable={isEditing}
                 multiline
               />
@@ -399,13 +426,13 @@ const ProfileScreen = () => {
 
           {/* Save Button */}
           {isEditing && (
-            <TouchableOpacity 
-              style={styles.saveButton} 
+            <TouchableOpacity
+              style={styles.saveButton}
               onPress={saveUserDetails}
               disabled={isLoading}
             >
               <LinearGradient
-                colors={['#667eea', '#764ba2']}
+                colors={["#667eea", "#764ba2"]}
                 style={styles.saveButtonGradient}
               >
                 {isLoading ? (
@@ -437,18 +464,18 @@ const ProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#6B7280',
+    color: "#6B7280",
   },
   scrollView: {
     flex: 1,
@@ -461,7 +488,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 30,
   },
   profileHeader: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   avatarContainer: {
     marginBottom: 15,
@@ -471,33 +498,33 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     borderWidth: 3,
-    borderColor: 'white',
+    borderColor: "white",
   },
   avatarPlaceholder: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 3,
-    borderColor: 'white',
+    borderColor: "white",
   },
   userName: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
     marginBottom: 5,
   },
   userEmail: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
+    color: "rgba(255,255,255,0.9)",
     marginBottom: 5,
   },
   userType: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    color: "rgba(255,255,255,0.8)",
+    backgroundColor: "rgba(255,255,255,0.2)",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -506,57 +533,57 @@ const styles = StyleSheet.create({
     margin: 20,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#374151',
+    fontWeight: "bold",
+    color: "#374151",
   },
   editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#667eea',
+    borderColor: "#667eea",
   },
   editButtonText: {
     marginLeft: 5,
-    color: '#667eea',
-    fontWeight: '500',
+    color: "#667eea",
+    fontWeight: "500",
   },
   inputGroup: {
     marginBottom: 20,
   },
   rowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   halfWidth: {
-    width: '48%',
+    width: "48%",
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: "600",
+    color: "#374151",
     marginBottom: 8,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
     borderRadius: 12,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
@@ -571,18 +598,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 16,
     marginLeft: 12,
-    color: '#374151',
+    color: "#374151",
   },
   inputDisabled: {
-    color: '#6B7280',
+    color: "#6B7280",
   },
   saveButton: {
     marginTop: 20,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     ...Platform.select({
       ios: {
-        shadowColor: '#667eea',
+        shadowColor: "#667eea",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -593,30 +620,30 @@ const styles = StyleSheet.create({
     }),
   },
   saveButtonGradient: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   saveButtonText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
     marginLeft: 8,
   },
   logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 30,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: "#FEF2F2",
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: "#FECACA",
     ...Platform.select({
       ios: {
-        shadowColor: '#EF4444',
+        shadowColor: "#EF4444",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
@@ -628,27 +655,27 @@ const styles = StyleSheet.create({
   },
   logoutButtonText: {
     marginLeft: 5,
-    color: '#EF4444',
-    fontWeight: '500',
+    color: "#EF4444",
+    fontWeight: "500",
     fontSize: 16,
   },
   errorText: {
     fontSize: 16,
-    color: '#EF4444',
-    textAlign: 'center',
+    color: "#EF4444",
+    textAlign: "center",
     marginTop: 100,
   },
   loginButton: {
-    backgroundColor: '#667eea',
+    backgroundColor: "#667eea",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
     marginTop: 20,
-    alignSelf: 'center',
+    alignSelf: "center",
   },
   loginButtonText: {
-    color: 'white',
-    fontWeight: '600',
+    color: "white",
+    fontWeight: "600",
   },
   bottomSpacing: {
     height: 100, // Extra space at bottom to ensure logout button is visible
