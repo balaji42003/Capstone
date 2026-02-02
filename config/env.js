@@ -4,10 +4,10 @@
 
 export const config = {
   // For development - replace with your actual Google Gemini API key
-  GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || "AIzaSyBlHkTGPmdV8lrqMogUWpcQWPrrvzMugjA",
+  GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || "AIzaSyAAqtKe6EZAm3l5be3Lfbj7iKmXaOb2Cnk",
   
   // API endpoint
-  GEMINI_API_URL: "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+  GEMINI_API_URL: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 };
 
 // Instructions for getting Google Gemini API key:

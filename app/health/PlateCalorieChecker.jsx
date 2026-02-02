@@ -1,19 +1,21 @@
+import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Platform,
+  Alert,
   Dimensions,
   Image,
-  Alert
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
+import { config } from '../../config/env';
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
@@ -173,37 +175,167 @@ const PlateCalorieChecker = () => {
 
     setIsAnalyzing(true);
     try {
-      // Prepare FormData
-      const formData = new FormData();
-      formData.append('file', {
-        uri: selectedImage,
-        name: 'food_image.jpg',
-        type: 'image/jpeg',
+      // Log API key (masked for security)
+      const maskedKey = config.GOOGLE_API_KEY ? 
+        config.GOOGLE_API_KEY.substring(0, 8) + '...' + config.GOOGLE_API_KEY.slice(-4) : 
+        'NOT SET';
+      console.log('Using API Key:', maskedKey);
+      console.log('Selected image:', selectedImage);
+      
+      // Convert image to base64
+      const base64Image = await FileSystem.readAsStringAsync(selectedImage, {
+        encoding: FileSystem.EncodingType.Base64,
       });
+      
+      console.log('Image converted to base64, length:', base64Image.length);
 
-      // Call backend
-      const response = await fetch('http://10.3.5.210:5006/analyze', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-        },
-        body: formData,
-      });
+      // Call Gemini API using gemini-2.0-flash-exp (Gemini 2.0 with vision support)
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${config.GOOGLE_API_KEY}`;
+      console.log('Calling API:', apiUrl.replace(config.GOOGLE_API_KEY, 'API_KEY_HIDDEN'));
+      
+      const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                {
+                  text: `You are an expert nutritionist AI. Analyze this food image carefully, even if the photo quality is not perfect. Do your best to identify food items even in blurry, dark, or unclear photos.
+
+IMPORTANT: You MUST provide a response for ANY food image, regardless of quality. Make your best educated estimate.
+
+Provide a detailed nutritional breakdown. Return ONLY a valid JSON object (no markdown, no code blocks, no extra text) with this exact structure:
+
+{
+  "confidence": <number 0-100 (even for unclear photos, give at least 60-70)>,
+  "totalCalories": <number (estimated total)>,
+  "servingSize": "<string like 'Medium plate' or '1 bowl'>",
+  "detectedFoods": [
+    {
+      "name": "<food name - make best guess if unclear>",
+      "quantity": "<estimated amount like '1 cup', '100g'>",
+      "calories": <number>,
+      "percentage": <number 0-100 of total calories>,
+      "nutrition": {
+        "carbs": <number in grams>,
+        "protein": <number in grams>,
+        "fat": <number in grams>,
+        "fiber": <number in grams>
+      }
+    }
+  ],
+  "nutritionSummary": {
+    "totalCarbs": <sum of all carbs>,
+    "totalProtein": <sum of all protein>,
+    "totalFat": <sum of all fat>,
+    "totalFiber": <sum of all fiber>
+  },
+  "healthInsights": {
+    "rating": "<Excellent/Good/Fair/Poor>",
+    "positives": ["<positive aspect 1>", "<positive aspect 2>"],
+    "improvements": ["<suggestion 1>", "<suggestion 2>"]
+  }
+}
+
+Rules:
+- ALWAYS provide a complete response, even for unclear/blurry photos
+- Make educated estimates based on visible colors, shapes, and portions
+- If you can't identify specific items, use general categories (e.g., "grain dish", "protein source", "vegetables")
+- Provide reasonable calorie estimates based on typical serving sizes
+- Include at least 2-3 detected food items minimum
+- Be helpful and provide a response rather than refusing
+
+Return ONLY the JSON object, nothing else.`
+                },
+                {
+                  inline_data: {
+                    mime_type: 'image/jpeg',
+                    data: base64Image
+                  }
+                }
+              ]
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 2048,
+            },
+            safetySettings: [
+              {
+                category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+                threshold: "BLOCK_NONE"
+              }
+            ]
+          })
+        }
+      );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        const errorData = await response.json().catch(() => null);
+        console.log('API Error Response:', response.status, errorData);
+        
+        if (response.status === 429) {
+          // Check actual error message from API
+          const errorMsg = errorData?.error?.message || '';
+          console.log('Rate limit error details:', errorMsg);
+          throw new Error('RATE_LIMIT');
+        } else if (response.status === 400) {
+          const errorMsg = errorData?.error?.message || 'Invalid request';
+          console.log('Bad request error:', errorMsg);
+          throw new Error(errorMsg);
+        } else if (response.status === 403) {
+          throw new Error('API_KEY_INVALID');
+        } else {
+          const errorMsg = errorData?.error?.message || `API error: ${response.status}`;
+          throw new Error(errorMsg);
+        }
       }
 
       const data = await response.json();
-      if (data.success && data.calorie_analysis) {
-        setAnalysisResult(data.calorie_analysis);
+      
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        const resultText = data.candidates[0].content.parts[0].text;
+        
+        // Clean the response - remove markdown code blocks if present
+        let cleanedText = resultText.trim();
+        cleanedText = cleanedText.replace(/```json\s*/g, '');
+        cleanedText = cleanedText.replace(/```\s*/g, '');
+        cleanedText = cleanedText.trim();
+        
+        const analysisData = JSON.parse(cleanedText);
+        setAnalysisResult(analysisData);
         setCurrentStep(3);
       } else {
-        throw new Error(data.error || 'Analysis failed');
+        throw new Error('Invalid response from Gemini API');
       }
     } catch (error) {
-      Alert.alert('Analysis Error', error.message || 'Failed to analyze image.');
+      console.error('Analysis error:', error);
+      console.error('Error message:', error.message);
+      
+      let errorMessage = 'Failed to analyze the image. Please try again.';
+      let errorTitle = 'Analysis Error';
+      
+      if (error.message === 'RATE_LIMIT') {
+        errorTitle = '⏱️ Rate Limit';
+        errorMessage = 'The API quota has been exceeded. This happens when:\n\n• Too many requests in a short time\n• Daily/monthly quota exceeded\n\nSolutions:\n1. Wait 24 hours for quota reset\n2. Check your API key quota at:\n   aistudio.google.com/app/apikey\n3. Get a new API key if needed';
+      } else if (error.message === 'API_KEY_INVALID') {
+        errorTitle = '🔑 Invalid API Key';
+        errorMessage = 'The Google API key is invalid or expired.\n\nPlease check:\n1. API key is correct in config/env.js\n2. Gemini API is enabled for this key\n3. Get a new key at: aistudio.google.com/app/apikey';
+      } else if (error.message.includes('JSON')) {
+        errorMessage = 'Could not process the image. Please try with a clearer photo of your meal.';
+      } else if (error.message.includes('quota') || error.message.includes('exceeded')) {
+        errorTitle = '📊 Quota Exceeded';
+        errorMessage = `API Quota Issue:\n\n${error.message}\n\nPlease wait 24 hours or upgrade your API plan.`;
+      } else {
+        errorMessage = `Error: ${error.message}\n\nPlease check the console logs for more details.`;
+      }
+      
+      Alert.alert(errorTitle, errorMessage, [
+        { text: 'OK', style: 'cancel' }
+      ]);
     } finally {
       setIsAnalyzing(false);
     }

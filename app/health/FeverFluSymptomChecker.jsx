@@ -1,20 +1,19 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  SafeAreaView,
-  Platform,
-  TextInput,
-  Animated,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
@@ -114,7 +113,7 @@ const FeverFluSymptomChecker = () => {
     const prompt = `You are a general specialist. Given the following patient symptoms, provide a list of all possible diagnoses with probability scores (out of 100, distributed across all possibilities) and a brief explanation for each. Format your response as a JSON array named 'possibilities', each with 'condition', 'probability', and 'description'. Symptoms: ${JSON.stringify(symptoms)}`;
 
     try {
-      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyDL8euQekfkLNJ5E2fPGukDd-0H9mMstrc', {
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyBlHkTGPmdV8lrqMogUWpcQWPrrvzMugjA', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

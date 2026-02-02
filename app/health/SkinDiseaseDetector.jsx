@@ -71,10 +71,10 @@ const SkinDiseaseDetector = () => {
 
   // API configuration - Using Android Emulator special IP for localhost
   const API_URLS = [
-    'http://10.10.58.21:5002' // Changed to localhost only
+    'http://10.2.16.82:5002' // Changed to localhost only
   ];
 
-  const [currentApiUrl, setCurrentApiUrl] = useState('http://10.10.58.21:5002');
+  const [currentApiUrl, setCurrentApiUrl] = useState('http://10.2.16.82:5002');
 
   // Test connection on component mount
   useEffect(() => {
@@ -82,7 +82,7 @@ const SkinDiseaseDetector = () => {
   }, []);
 
   const testConnectionToAvailableServer = async () => {
-    const url = 'http://10.10.58.21:5002';  // Changed to localhost
+    const url = 'http://10.2.16.82:5002';  // Changed to localhost
     console.log(`Testing connection to: ${url}`);
     try {
       const response = await fetch(`${url}/`, {
@@ -216,7 +216,7 @@ const SkinDiseaseDetector = () => {
 
   const testConnection = async () => {
     try {
-      const response = await fetch('http://10.10.58.21:5002', {
+      const response = await fetch('http://10.2.16.82:5002', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',

@@ -69,8 +69,8 @@ export default function VideoCall() {
   const translateY = useSharedValue(height - 200); // Start at bottom
 
   // TODO: Replace with your new Zego credentials
-  const yourAppID = 1080551434; // Replace with your new App ID
-  const yourAppSign = "f5c03e885dce1bf07aef858efeaebe06ae7cabe2f427c498d43a2d1aa3cde79f"; // Replace with your new App Sign
+  const yourAppID = 1078241982; // Replace with your new App ID
+  const yourAppSign = "9f2be7124a30eb225c067e1b9fcba63279a2faa0f4de96fb9a3681a28c18c1a7"; // Replace with your new App Sign
   
   const callID = roomId;
   const displayName = userName;

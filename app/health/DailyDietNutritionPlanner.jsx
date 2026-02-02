@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { config } from '../../config/env';
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
@@ -108,36 +109,167 @@ const DailyDietNutritionPlanner = () => {
   const submitForm = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://10.3.5.210:5003/predict', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          age: parseInt(formData.age),
-          gender: formData.gender,
-          weight: parseFloat(formData.weight),
-          height: parseFloat(formData.height),
-          diet_preference: formData.diet_preference,
-          activity_level: formData.activity_level,
-          weekly_activity: parseInt(formData.weekly_activity),
-          disease: formData.disease,
-          allergies: formData.allergies,
-          health_goal: formData.health_goal
-        })
-      });
+      // Calculate BMI
+      const heightInMeters = parseFloat(formData.height) / 100;
+      const bmi = (parseFloat(formData.weight) / (heightInMeters * heightInMeters)).toFixed(1);
+      
+      // Create detailed prompt for Gemini
+      const prompt = `You are an expert nutritionist and dietitian. Create a personalized daily diet and nutrition plan based on the following information:
+
+**User Profile:**
+- Age: ${formData.age} years
+- Gender: ${formData.gender}
+- Weight: ${formData.weight} kg
+- Height: ${formData.height} cm
+- BMI: ${bmi}
+- Diet Preference: ${formData.diet_preference}
+- Activity Level: ${formData.activity_level}
+- Weekly Exercise: ${formData.weekly_activity} days/week
+- Health Condition: ${formData.disease}
+- Allergies: ${formData.allergies}
+- Health Goal: ${formData.health_goal}
+
+Provide a comprehensive, realistic, and practical nutrition plan. Return ONLY a valid JSON object (no markdown, no code blocks) with this exact structure:
+
+{
+  "success": true,
+  "daily_calories": <number>,
+  "bmi": "<number>",
+  "bmi_category": "<Underweight/Normal/Overweight/Obese>",
+  "macros": {
+    "protein": "<number>g",
+    "carbs": "<number>g",
+    "fats": "<number>g",
+    "fiber": "<number>g"
+  },
+  "meal_plan": {
+    "breakfast": {
+      "time": "7:00 AM - 8:00 AM",
+      "items": ["<item 1>", "<item 2>", "<item 3>"],
+      "calories": <number>,
+      "description": "<brief description>"
+    },
+    "mid_morning": {
+      "time": "10:00 AM - 11:00 AM",
+      "items": ["<item 1>", "<item 2>"],
+      "calories": <number>,
+      "description": "<brief description>"
+    },
+    "lunch": {
+      "time": "12:30 PM - 1:30 PM",
+      "items": ["<item 1>", "<item 2>", "<item 3>", "<item 4>"],
+      "calories": <number>,
+      "description": "<brief description>"
+    },
+    "evening_snack": {
+      "time": "4:00 PM - 5:00 PM",
+      "items": ["<item 1>", "<item 2>"],
+      "calories": <number>,
+      "description": "<brief description>"
+    },
+    "dinner": {
+      "time": "7:30 PM - 8:30 PM",
+      "items": ["<item 1>", "<item 2>", "<item 3>"],
+      "calories": <number>,
+      "description": "<brief description>"
+    }
+  },
+  "hydration": "<water intake recommendation>",
+  "supplements": ["<supplement 1 if needed>", "<supplement 2 if needed>"],
+  "recommendations": [
+    "<practical tip 1>",
+    "<practical tip 2>",
+    "<practical tip 3>",
+    "<practical tip 4>"
+  ],
+  "foods_to_avoid": ["<food 1>", "<food 2>", "<food 3>"],
+  "health_insights": "<personalized health advice based on their condition and goal>"
+}
+
+Important:
+- Make meal suggestions based on their diet preference (${formData.diet_preference})
+- Avoid foods related to their allergies (${formData.allergies})
+- Consider their health condition (${formData.disease})
+- Align with their health goal (${formData.health_goal})
+- Provide realistic, easy-to-follow Indian/International meal options
+- Include proper portion sizes and timing
+- Be specific with food items and quantities
+
+Return ONLY the JSON object, nothing else.`;
+
+      // Call Gemini API (using Gemini 2.0)
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${config.GOOGLE_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: prompt
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 4096,
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('API Error Response:', response.status, errorData);
+        throw new Error(`API error: ${response.status}`);
+      }
 
       const data = await response.json();
+      console.log('Gemini API Response:', JSON.stringify(data, null, 2));
       
-      if (data.success) {
-        setResults(data);
-        setShowResults(true);
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        const resultText = data.candidates[0].content.parts[0].text;
+        console.log('Raw result text:', resultText);
+        
+        // Clean the response - remove markdown code blocks if present
+        let cleanedText = resultText.trim();
+        cleanedText = cleanedText.replace(/```json\s*/g, '');
+        cleanedText = cleanedText.replace(/```\s*/g, '');
+        cleanedText = cleanedText.trim();
+        
+        console.log('Cleaned text:', cleanedText);
+        
+        try {
+          const nutritionData = JSON.parse(cleanedText);
+          console.log('Parsed nutrition data:', nutritionData);
+          
+          // Validate the data structure
+          if (!nutritionData.meal_plan) {
+            console.error('Invalid data structure - missing meal_plan');
+            throw new Error('Invalid nutrition plan structure');
+          }
+          
+          setResults(nutritionData);
+          setShowResults(true);
+        } catch (parseError) {
+          console.error('JSON Parse Error:', parseError);
+          console.error('Failed to parse text:', cleanedText.substring(0, 500));
+          throw new Error('Failed to parse nutrition plan. Please try again.');
+        }
       } else {
-        Alert.alert('Error', data.message || 'Failed to get nutrition recommendations');
+        console.error('Invalid API response structure:', data);
+        throw new Error('Invalid response from Gemini API');
       }
     } catch (error) {
       console.error('API Error:', error);
-      Alert.alert('Network Error', 'Unable to connect to the nutrition service. Please check your connection and try again.');
+      console.error('Error stack:', error.stack);
+      Alert.alert(
+        'Error', 
+        'Failed to generate nutrition plan. Please try again.\n\n' + (error.message || 'Unknown error')
+      );
     } finally {
       setIsLoading(false);
     }
@@ -265,40 +397,114 @@ const DailyDietNutritionPlanner = () => {
     </View>
   );
 
-  const renderResults = () => (
-    <ScrollView style={styles.resultsContainer}>
-      <View style={styles.resultsHeader}>
-        <Text style={styles.resultsTitle}>🎉 Your Nutrition Plan</Text>
-        <Text style={styles.caloriesText}>{results.calories} kcal/day</Text>
-      </View>
+  const renderResults = () => {
+    if (!results || !results.meal_plan) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>No results available</Text>
+        </View>
+      );
+    }
 
-      {/* Nutrient Information */}
-      <View style={styles.sectionContainer}>
-        <Text style={styles.sectionTitle}>📊 Daily Nutrients</Text>
-        <View style={styles.nutrientGrid}>
-          {Object.entries(results.nutrient_info).map(([key, value]) => (
-            <View key={key} style={styles.nutrientCard}>
-              <Text style={styles.nutrientValue}>{value.split('::')[1]?.trim() || value}</Text>
-              <Text style={styles.nutrientLabel}>{key}</Text>
+    return (
+      <ScrollView style={styles.resultsContainer} showsVerticalScrollIndicator={false}>
+        <View style={styles.resultsHeader}>
+          <Text style={styles.resultsTitle}>🎉 Your Nutrition Plan</Text>
+          <Text style={styles.caloriesText}>{results.daily_calories || 0} kcal/day</Text>
+          {results.bmi && (
+            <Text style={styles.bmiText}>BMI: {results.bmi} ({results.bmi_category})</Text>
+          )}
+        </View>
+
+        {/* Macros */}
+        {results.macros && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>📊 Daily Macros</Text>
+            <View style={styles.nutrientGrid}>
+              <View style={styles.nutrientCard}>
+                <Text style={styles.nutrientValue}>{results.macros.protein}</Text>
+                <Text style={styles.nutrientLabel}>Protein</Text>
+              </View>
+              <View style={styles.nutrientCard}>
+                <Text style={styles.nutrientValue}>{results.macros.carbs}</Text>
+                <Text style={styles.nutrientLabel}>Carbs</Text>
+              </View>
+              <View style={styles.nutrientCard}>
+                <Text style={styles.nutrientValue}>{results.macros.fats}</Text>
+                <Text style={styles.nutrientLabel}>Fats</Text>
+              </View>
+              <View style={styles.nutrientCard}>
+                <Text style={styles.nutrientValue}>{results.macros.fiber}</Text>
+                <Text style={styles.nutrientLabel}>Fiber</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Meal Plan */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>🍽️ Daily Meal Plan</Text>
+          {Object.entries(results.meal_plan).map(([mealType, meal]) => (
+            <View key={mealType} style={styles.mealCard}>
+              <View style={styles.mealHeader}>
+                <Text style={styles.mealType}>{mealType.replace(/_/g, ' ').toUpperCase()}</Text>
+                <Text style={styles.mealTime}>{meal.time}</Text>
+              </View>
+              <Text style={styles.mealCalories}>🔥 {meal.calories} kcal</Text>
+              <View style={styles.mealItems}>
+                {meal.items && meal.items.map((item, idx) => (
+                  <Text key={idx} style={styles.mealItem}>• {item}</Text>
+                ))}
+              </View>
+              {meal.description && (
+                <Text style={styles.mealDescription}>{meal.description}</Text>
+              )}
             </View>
           ))}
         </View>
-      </View>
 
-      {/* Meal Suggestions */}
-      <View style={styles.sectionContainer}>
-        <Text style={styles.sectionTitle}>🍽️ Meal Suggestions</Text>
-        {Object.entries(results.meal_suggestions).map(([mealType, suggestion]) => (
-          <View key={mealType} style={styles.mealCard}>
-            <Text style={styles.mealType}>{mealType}</Text>
-            <Text style={styles.mealSuggestion}>
-              {suggestion.split('::')[1]?.trim() || suggestion}
-            </Text>
+        {/* Hydration */}
+        {results.hydration && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>💧 Hydration</Text>
+            <Text style={styles.infoText}>{results.hydration}</Text>
           </View>
-        ))}
-      </View>
-    </ScrollView>
-  );
+        )}
+
+        {/* Recommendations */}
+        {results.recommendations && results.recommendations.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>✨ Health Tips</Text>
+            {results.recommendations.map((tip, idx) => (
+              <Text key={idx} style={styles.tipItem}>• {tip}</Text>
+            ))}
+          </View>
+        )}
+
+        {/* Foods to Avoid */}
+        {results.foods_to_avoid && results.foods_to_avoid.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>⚠️ Foods to Avoid</Text>
+            <View style={styles.avoidList}>
+              {results.foods_to_avoid.map((food, idx) => (
+                <Text key={idx} style={styles.avoidItem}>• {food}</Text>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Health Insights */}
+        {results.health_insights && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>💡 Personalized Advice</Text>
+            <Text style={styles.insightsText}>{results.health_insights}</Text>
+          </View>
+        )}
+
+        <View style={{height: 30}} />
+      </ScrollView>
+    );
+  };
 
   const renderProgressBar = () => (
     <View style={styles.progressContainer}>
@@ -372,6 +578,22 @@ const DailyDietNutritionPlanner = () => {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#10B981" />
+            <Text style={styles.loadingText}>Analyzing your profile...</Text>
+            <Text style={styles.loadingSubtext}>Creating personalized nutrition plan</Text>
+            <View style={styles.loadingDots}>
+              <View style={[styles.dot, styles.dot1]} />
+              <View style={[styles.dot, styles.dot2]} />
+              <View style={[styles.dot, styles.dot3]} />
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Results Modal */}
       <Modal
@@ -628,6 +850,36 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#10B981',
   },
+  bmiText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 100,
+  },
+  loaderText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 20,
+  },
+  loaderSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+  },
   sectionContainer: {
     marginBottom: 24,
   },
@@ -676,16 +928,133 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  mealHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   mealType: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#10B981',
+  },
+  mealTime: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  mealCalories: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F59E0B',
     marginBottom: 8,
+  },
+  mealItems: {
+    marginBottom: 8,
+  },
+  mealItem: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 4,
+  },
+  mealDescription: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   mealSuggestion: {
     fontSize: 14,
     color: '#374151',
     lineHeight: 20,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 22,
+    backgroundColor: 'white',
+    padding: 12,
+    borderRadius: 8,
+  },
+  tipItem: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  avoidList: {
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+  },
+  avoidItem: {
+    fontSize: 14,
+    color: '#DC2626',
+    marginBottom: 4,
+  },
+  insightsText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 22,
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingCard: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 40,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
+    minWidth: 280,
+  },
+  loadingText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  loadingDots: {
+    flexDirection: 'row',
+    marginTop: 20,
+    gap: 8,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  dot1: {
+    opacity: 0.3,
+  },
+  dot2: {
+    opacity: 0.6,
+  },
+  dot3: {
+    opacity: 1,
   },
 });
 
