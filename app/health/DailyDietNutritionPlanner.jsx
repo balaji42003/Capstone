@@ -1,6 +1,6 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,17 +13,20 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
-} from 'react-native';
-import { config } from '../../config/env';
+  View,
+} from "react-native";
+import { API_ENDPOINTS } from "../../config/api.config";
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
 try {
-  LinearGradient = require('expo-linear-gradient').LinearGradient;
+  LinearGradient = require("expo-linear-gradient").LinearGradient;
 } catch (e) {
   LinearGradient = ({ children, colors, style, ...props }) => (
-    <View style={[style, { backgroundColor: colors?.[0] || '#10B981' }]} {...props}>
+    <View
+      style={[style, { backgroundColor: colors?.[0] || "#10B981" }]}
+      {...props}
+    >
       {children}
     </View>
   );
@@ -38,39 +41,75 @@ const DailyDietNutritionPlanner = () => {
 
   // Form data state
   const [formData, setFormData] = useState({
-    age: '',
-    gender: 'Male',
-    weight: '',
-    height: '',
-    diet_preference: 'Vegetarian',
-    activity_level: 'Moderate',
-    weekly_activity: '3',
-    disease: 'None',
-    allergies: 'None',
-    health_goal: 'Maintenance'
+    age: "",
+    gender: "Male",
+    weight: "",
+    height: "",
+    diet_preference: "Vegetarian",
+    activity_level: "Moderate",
+    weekly_activity: "3",
+    disease: "None",
+    allergies: "None",
+    health_goal: "Maintenance",
   });
 
-  const genderOptions = ['Male', 'Female'];
+  const genderOptions = ["Male", "Female"];
   const dietOptions = [
-    'Non-Vegetarian', 'Vegetarian', 'Vegan', 'Plant-Based', 'Mediterranean',
-    'Keto', 'Paleo', 'Low-Carb', 'Gluten-Free', 'Pescatarian', 'Flexitarian'
+    "Non-Vegetarian",
+    "Vegetarian",
+    "Vegan",
+    "Plant-Based",
+    "Mediterranean",
+    "Keto",
+    "Paleo",
+    "Low-Carb",
+    "Gluten-Free",
+    "Pescatarian",
+    "Flexitarian",
   ];
-  const activityOptions = ['Sedentary', 'Light', 'Moderate', 'Active', 'Very Active'];
+  const activityOptions = [
+    "Sedentary",
+    "Light",
+    "Moderate",
+    "Active",
+    "Very Active",
+  ];
   const diseaseOptions = [
-    'None', 'Diabetes', 'Hypertension', 'Heart Disease', 'GERD', 'IBS',
-    'Celiac', 'Obesity', 'Thyroid', 'Iron Deficiency', 'B12 Deficiency'
+    "None",
+    "Diabetes",
+    "Hypertension",
+    "Heart Disease",
+    "GERD",
+    "IBS",
+    "Celiac",
+    "Obesity",
+    "Thyroid",
+    "Iron Deficiency",
+    "B12 Deficiency",
   ];
   const allergyOptions = [
-    'None', 'Peanuts', 'Tree Nuts', 'Milk', 'Eggs', 'Soy',
-    'Fish', 'Shellfish', 'Wheat', 'Multiple'
+    "None",
+    "Peanuts",
+    "Tree Nuts",
+    "Milk",
+    "Eggs",
+    "Soy",
+    "Fish",
+    "Shellfish",
+    "Wheat",
+    "Multiple",
   ];
   const goalOptions = [
-    'Weight Loss', 'Maintenance', 'Weight Gain', 'Muscle Gain',
-    'Better Health', 'Athletic Performance'
+    "Weight Loss",
+    "Maintenance",
+    "Weight Gain",
+    "Muscle Gain",
+    "Better Health",
+    "Athletic Performance",
   ];
 
   const updateFormData = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const validateStep = (step) => {
@@ -96,7 +135,10 @@ const DailyDietNutritionPlanner = () => {
         submitForm();
       }
     } else {
-      Alert.alert('Incomplete Form', 'Please fill in all required fields before proceeding.');
+      Alert.alert(
+        "Incomplete Form",
+        "Please fill in all required fields before proceeding.",
+      );
     }
   };
 
@@ -111,8 +153,11 @@ const DailyDietNutritionPlanner = () => {
     try {
       // Calculate BMI
       const heightInMeters = parseFloat(formData.height) / 100;
-      const bmi = (parseFloat(formData.weight) / (heightInMeters * heightInMeters)).toFixed(1);
-      
+      const bmi = (
+        parseFloat(formData.weight) /
+        (heightInMeters * heightInMeters)
+      ).toFixed(1);
+
       // Create detailed prompt for Gemini
       const prompt = `You are an expert nutritionist and dietitian. Create a personalized daily diet and nutrition plan based on the following information:
 
@@ -197,78 +242,136 @@ Important:
 
 Return ONLY the JSON object, nothing else.`;
 
-      // Call Gemini API (using Gemini 2.0)
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${config.GOOGLE_API_KEY}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+      // Call Gemini API
+      const response = await fetch(API_ENDPOINTS.GEMINI.GENERATE_FLASH, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 8192,
           },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: prompt
-              }]
-            }],
-            generationConfig: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 4096,
-            }
-          })
-        }
-      );
+        }),
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        console.error('API Error Response:', response.status, errorData);
+        console.error("API Error Response:", response.status, errorData);
         throw new Error(`API error: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('Gemini API Response:', JSON.stringify(data, null, 2));
-      
+      console.log("Gemini API Response:", JSON.stringify(data, null, 2));
+
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
         const resultText = data.candidates[0].content.parts[0].text;
-        console.log('Raw result text:', resultText);
-        
+        const finishReason = data.candidates[0].finishReason;
+
+        console.log("Raw result text:", resultText);
+        console.log("Finish reason:", finishReason);
+
+        // Handle truncated response
+        if (finishReason === "MAX_TOKENS") {
+          console.warn(
+            "Response was truncated due to MAX_TOKENS - attempting to fix JSON",
+          );
+        }
+
         // Clean the response - remove markdown code blocks if present
         let cleanedText = resultText.trim();
-        cleanedText = cleanedText.replace(/```json\s*/g, '');
-        cleanedText = cleanedText.replace(/```\s*/g, '');
+        cleanedText = cleanedText.replace(/```json\s*/g, "");
+        cleanedText = cleanedText.replace(/```\s*/g, "");
         cleanedText = cleanedText.trim();
-        
-        console.log('Cleaned text:', cleanedText);
-        
+
+        // Fix incomplete JSON
+        if (!cleanedText.endsWith("}")) {
+          console.log("Fixing incomplete JSON structure...");
+
+          // Count opening and closing braces/brackets
+          const openBraces = (cleanedText.match(/{/g) || []).length;
+          const closeBraces = (cleanedText.match(/}/g) || []).length;
+          const openBrackets = (cleanedText.match(/\[/g) || []).length;
+          const closeBrackets = (cleanedText.match(/\]/g) || []).length;
+
+          // Remove incomplete string at the end (everything after last complete value)
+          const lastCompleteQuote = cleanedText.lastIndexOf('"');
+          const lastOpenQuote = cleanedText.lastIndexOf('": "');
+
+          if (lastOpenQuote > lastCompleteQuote - 10) {
+            // There's an incomplete string value, truncate it
+            const truncatePoint = cleanedText.lastIndexOf('",');
+            if (truncatePoint === -1) {
+              // Find last complete property
+              const lastComma = cleanedText.lastIndexOf(",");
+              if (lastComma > 0) {
+                cleanedText = cleanedText.substring(0, lastComma);
+              }
+            } else {
+              cleanedText = cleanedText.substring(0, truncatePoint + 1);
+            }
+          }
+
+          // Close any open brackets
+          for (let i = 0; i < openBrackets - closeBrackets; i++) {
+            cleanedText += "]";
+          }
+
+          // Close any open braces
+          for (let i = 0; i < openBraces - closeBraces; i++) {
+            cleanedText += "}";
+          }
+
+          console.log("Fixed JSON structure");
+        }
+
+        console.log(
+          "Cleaned text (first 500 chars):",
+          cleanedText.substring(0, 500),
+        );
+
         try {
           const nutritionData = JSON.parse(cleanedText);
-          console.log('Parsed nutrition data:', nutritionData);
-          
+          console.log("✅ Successfully parsed nutrition data");
+          console.log("Daily calories:", nutritionData.daily_calories);
+          console.log("BMI:", nutritionData.bmi);
+
           // Validate the data structure
           if (!nutritionData.meal_plan) {
-            console.error('Invalid data structure - missing meal_plan');
-            throw new Error('Invalid nutrition plan structure');
+            console.error("Invalid data structure - missing meal_plan");
+            throw new Error("Invalid nutrition plan structure");
           }
-          
+
           setResults(nutritionData);
           setShowResults(true);
         } catch (parseError) {
-          console.error('JSON Parse Error:', parseError);
-          console.error('Failed to parse text:', cleanedText.substring(0, 500));
-          throw new Error('Failed to parse nutrition plan. Please try again.');
+          console.error("❌ JSON Parse Error:", parseError);
+          console.error("Failed text sample:", cleanedText.substring(0, 500));
+          throw new Error("Failed to parse nutrition plan. Please try again.");
         }
       } else {
-        console.error('Invalid API response structure:', data);
-        throw new Error('Invalid response from Gemini API');
+        console.error("Invalid API response structure:", data);
+        throw new Error("Invalid response from Gemini API");
       }
     } catch (error) {
-      console.error('API Error:', error);
-      console.error('Error stack:', error.stack);
+      console.error("API Error:", error);
+      console.error("Error stack:", error.stack);
       Alert.alert(
-        'Error', 
-        'Failed to generate nutrition plan. Please try again.\n\n' + (error.message || 'Unknown error')
+        "Error",
+        "Failed to generate nutrition plan. Please try again.\n\n" +
+          (error.message || "Unknown error"),
       );
     } finally {
       setIsLoading(false);
@@ -280,30 +383,39 @@ Return ONLY the JSON object, nothing else.`;
     setResults(null);
     setShowResults(false);
     setFormData({
-      age: '',
-      gender: 'Male',
-      weight: '',
-      height: '',
-      diet_preference: 'Vegetarian',
-      activity_level: 'Moderate',
-      weekly_activity: '3',
-      disease: 'None',
-      allergies: 'None',
-      health_goal: 'Maintenance'
+      age: "",
+      gender: "Male",
+      weight: "",
+      height: "",
+      diet_preference: "Vegetarian",
+      activity_level: "Moderate",
+      weekly_activity: "3",
+      disease: "None",
+      allergies: "None",
+      health_goal: "Maintenance",
     });
   };
 
   const renderDropdown = (value, options, onSelect, placeholder) => (
     <View style={styles.dropdownContainer}>
       <Text style={styles.dropdownLabel}>{placeholder}</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScroll}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.optionsScroll}
+      >
         {options.map((option) => (
           <TouchableOpacity
             key={option}
             style={[styles.optionChip, value === option && styles.selectedChip]}
             onPress={() => onSelect(option)}
           >
-            <Text style={[styles.optionText, value === option && styles.selectedText]}>
+            <Text
+              style={[
+                styles.optionText,
+                value === option && styles.selectedText,
+              ]}
+            >
               {option}
             </Text>
           </TouchableOpacity>
@@ -315,14 +427,16 @@ Return ONLY the JSON object, nothing else.`;
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>📊 Basic Information</Text>
-      <Text style={styles.stepSubtitle}>Let's start with your basic details</Text>
-      
+      <Text style={styles.stepSubtitle}>
+        Let's start with your basic details
+      </Text>
+
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Age (years)</Text>
         <TextInput
           style={styles.textInput}
           value={formData.age}
-          onChangeText={(text) => updateFormData('age', text)}
+          onChangeText={(text) => updateFormData("age", text)}
           placeholder="Enter your age"
           keyboardType="numeric"
           placeholderTextColor="#9CA3AF"
@@ -334,7 +448,7 @@ Return ONLY the JSON object, nothing else.`;
         <TextInput
           style={styles.textInput}
           value={formData.weight}
-          onChangeText={(text) => updateFormData('weight', text)}
+          onChangeText={(text) => updateFormData("weight", text)}
           placeholder="Enter your weight"
           keyboardType="decimal-pad"
           placeholderTextColor="#9CA3AF"
@@ -346,7 +460,7 @@ Return ONLY the JSON object, nothing else.`;
         <TextInput
           style={styles.textInput}
           value={formData.height}
-          onChangeText={(text) => updateFormData('height', text)}
+          onChangeText={(text) => updateFormData("height", text)}
           placeholder="Enter your height"
           keyboardType="decimal-pad"
           placeholderTextColor="#9CA3AF"
@@ -359,9 +473,19 @@ Return ONLY the JSON object, nothing else.`;
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>👤 Personal Preferences</Text>
       <Text style={styles.stepSubtitle}>Tell us about your preferences</Text>
-      
-      {renderDropdown(formData.gender, genderOptions, (value) => updateFormData('gender', value), 'Gender')}
-      {renderDropdown(formData.diet_preference, dietOptions, (value) => updateFormData('diet_preference', value), 'Diet Preference')}
+
+      {renderDropdown(
+        formData.gender,
+        genderOptions,
+        (value) => updateFormData("gender", value),
+        "Gender",
+      )}
+      {renderDropdown(
+        formData.diet_preference,
+        dietOptions,
+        (value) => updateFormData("diet_preference", value),
+        "Diet Preference",
+      )}
     </View>
   );
 
@@ -369,15 +493,20 @@ Return ONLY the JSON object, nothing else.`;
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>🏃‍♂️ Activity Level</Text>
       <Text style={styles.stepSubtitle}>How active are you?</Text>
-      
-      {renderDropdown(formData.activity_level, activityOptions, (value) => updateFormData('activity_level', value), 'Activity Level')}
-      
+
+      {renderDropdown(
+        formData.activity_level,
+        activityOptions,
+        (value) => updateFormData("activity_level", value),
+        "Activity Level",
+      )}
+
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Weekly Activity Days</Text>
         <TextInput
           style={styles.textInput}
           value={formData.weekly_activity}
-          onChangeText={(text) => updateFormData('weekly_activity', text)}
+          onChangeText={(text) => updateFormData("weekly_activity", text)}
           placeholder="How many days per week?"
           keyboardType="numeric"
           placeholderTextColor="#9CA3AF"
@@ -390,10 +519,25 @@ Return ONLY the JSON object, nothing else.`;
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>🏥 Health Information</Text>
       <Text style={styles.stepSubtitle}>Health conditions and goals</Text>
-      
-      {renderDropdown(formData.disease, diseaseOptions, (value) => updateFormData('disease', value), 'Health Conditions')}
-      {renderDropdown(formData.allergies, allergyOptions, (value) => updateFormData('allergies', value), 'Food Allergies')}
-      {renderDropdown(formData.health_goal, goalOptions, (value) => updateFormData('health_goal', value), 'Health Goal')}
+
+      {renderDropdown(
+        formData.disease,
+        diseaseOptions,
+        (value) => updateFormData("disease", value),
+        "Health Conditions",
+      )}
+      {renderDropdown(
+        formData.allergies,
+        allergyOptions,
+        (value) => updateFormData("allergies", value),
+        "Food Allergies",
+      )}
+      {renderDropdown(
+        formData.health_goal,
+        goalOptions,
+        (value) => updateFormData("health_goal", value),
+        "Health Goal",
+      )}
     </View>
   );
 
@@ -407,12 +551,19 @@ Return ONLY the JSON object, nothing else.`;
     }
 
     return (
-      <ScrollView style={styles.resultsContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.resultsContainer}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.resultsHeader}>
           <Text style={styles.resultsTitle}>🎉 Your Nutrition Plan</Text>
-          <Text style={styles.caloriesText}>{results.daily_calories || 0} kcal/day</Text>
+          <Text style={styles.caloriesText}>
+            {results.daily_calories || 0} kcal/day
+          </Text>
           {results.bmi && (
-            <Text style={styles.bmiText}>BMI: {results.bmi} ({results.bmi_category})</Text>
+            <Text style={styles.bmiText}>
+              BMI: {results.bmi} ({results.bmi_category})
+            </Text>
           )}
         </View>
 
@@ -422,7 +573,9 @@ Return ONLY the JSON object, nothing else.`;
             <Text style={styles.sectionTitle}>📊 Daily Macros</Text>
             <View style={styles.nutrientGrid}>
               <View style={styles.nutrientCard}>
-                <Text style={styles.nutrientValue}>{results.macros.protein}</Text>
+                <Text style={styles.nutrientValue}>
+                  {results.macros.protein}
+                </Text>
                 <Text style={styles.nutrientLabel}>Protein</Text>
               </View>
               <View style={styles.nutrientCard}>
@@ -447,14 +600,19 @@ Return ONLY the JSON object, nothing else.`;
           {Object.entries(results.meal_plan).map(([mealType, meal]) => (
             <View key={mealType} style={styles.mealCard}>
               <View style={styles.mealHeader}>
-                <Text style={styles.mealType}>{mealType.replace(/_/g, ' ').toUpperCase()}</Text>
+                <Text style={styles.mealType}>
+                  {mealType.replace(/_/g, " ").toUpperCase()}
+                </Text>
                 <Text style={styles.mealTime}>{meal.time}</Text>
               </View>
               <Text style={styles.mealCalories}>🔥 {meal.calories} kcal</Text>
               <View style={styles.mealItems}>
-                {meal.items && meal.items.map((item, idx) => (
-                  <Text key={idx} style={styles.mealItem}>• {item}</Text>
-                ))}
+                {meal.items &&
+                  meal.items.map((item, idx) => (
+                    <Text key={idx} style={styles.mealItem}>
+                      • {item}
+                    </Text>
+                  ))}
               </View>
               {meal.description && (
                 <Text style={styles.mealDescription}>{meal.description}</Text>
@@ -476,7 +634,9 @@ Return ONLY the JSON object, nothing else.`;
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>✨ Health Tips</Text>
             {results.recommendations.map((tip, idx) => (
-              <Text key={idx} style={styles.tipItem}>• {tip}</Text>
+              <Text key={idx} style={styles.tipItem}>
+                • {tip}
+              </Text>
             ))}
           </View>
         )}
@@ -487,7 +647,9 @@ Return ONLY the JSON object, nothing else.`;
             <Text style={styles.sectionTitle}>⚠️ Foods to Avoid</Text>
             <View style={styles.avoidList}>
               {results.foods_to_avoid.map((food, idx) => (
-                <Text key={idx} style={styles.avoidItem}>• {food}</Text>
+                <Text key={idx} style={styles.avoidItem}>
+                  • {food}
+                </Text>
               ))}
             </View>
           </View>
@@ -501,7 +663,7 @@ Return ONLY the JSON object, nothing else.`;
           </View>
         )}
 
-        <View style={{height: 30}} />
+        <View style={{ height: 30 }} />
       </ScrollView>
     );
   };
@@ -509,7 +671,12 @@ Return ONLY the JSON object, nothing else.`;
   const renderProgressBar = () => (
     <View style={styles.progressContainer}>
       <View style={styles.progressBar}>
-        <View style={[styles.progressFill, { width: `${(currentStep / 4) * 100}%` }]} />
+        <View
+          style={[
+            styles.progressFill,
+            { width: `${(currentStep / 4) * 100}%` },
+          ]}
+        />
       </View>
       <Text style={styles.progressText}>Step {currentStep} of 4</Text>
     </View>
@@ -518,9 +685,12 @@ Return ONLY the JSON object, nothing else.`;
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
-      <LinearGradient colors={['#10B981', '#059669']} style={styles.header}>
+      <LinearGradient colors={["#10B981", "#059669"]} style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
             <Ionicons name="chevron-back" size={28} color="white" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
@@ -533,13 +703,16 @@ Return ONLY the JSON object, nothing else.`;
         </View>
       </LinearGradient>
 
-      <KeyboardAvoidingView 
-        style={styles.content} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <KeyboardAvoidingView
+        style={styles.content}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         {!showResults && renderProgressBar()}
-        
-        <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
+
+        <ScrollView
+          style={styles.formContainer}
+          showsVerticalScrollIndicator={false}
+        >
           {!showResults && (
             <>
               {currentStep === 1 && renderStep1()}
@@ -558,18 +731,21 @@ Return ONLY the JSON object, nothing else.`;
                 <Text style={styles.prevButtonText}>Previous</Text>
               </TouchableOpacity>
             )}
-            
-            <TouchableOpacity 
-              style={[styles.nextButton, { flex: currentStep === 1 ? 1 : 0.6 }]} 
+
+            <TouchableOpacity
+              style={[styles.nextButton, { flex: currentStep === 1 ? 1 : 0.6 }]}
               onPress={nextStep}
               disabled={isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <LinearGradient colors={['#10B981', '#059669']} style={styles.nextButtonGradient}>
+                <LinearGradient
+                  colors={["#10B981", "#059669"]}
+                  style={styles.nextButtonGradient}
+                >
                   <Text style={styles.nextButtonText}>
-                    {currentStep === 4 ? 'Get My Plan' : 'Next'}
+                    {currentStep === 4 ? "Get My Plan" : "Next"}
                   </Text>
                   <Ionicons name="arrow-forward" size={20} color="white" />
                 </LinearGradient>
@@ -585,7 +761,9 @@ Return ONLY the JSON object, nothing else.`;
           <View style={styles.loadingCard}>
             <ActivityIndicator size="large" color="#10B981" />
             <Text style={styles.loadingText}>Analyzing your profile...</Text>
-            <Text style={styles.loadingSubtext}>Creating personalized nutrition plan</Text>
+            <Text style={styles.loadingSubtext}>
+              Creating personalized nutrition plan
+            </Text>
             <View style={styles.loadingDots}>
               <View style={[styles.dot, styles.dot1]} />
               <View style={[styles.dot, styles.dot2]} />
@@ -603,7 +781,10 @@ Return ONLY the JSON object, nothing else.`;
       >
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowResults(false)} style={styles.closeButton}>
+            <TouchableOpacity
+              onPress={() => setShowResults(false)}
+              style={styles.closeButton}
+            >
               <Ionicons name="close" size={28} color="#374151" />
             </TouchableOpacity>
             <TouchableOpacity onPress={resetForm} style={styles.newPlanButton}>
@@ -620,54 +801,54 @@ Return ONLY the JSON object, nothing else.`;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: "#F0FDF4",
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 44 : 24,
+    paddingTop: Platform.OS === "ios" ? 44 : 24,
     paddingBottom: 20,
     borderBottomLeftRadius: 25,
     borderBottomRightRadius: 25,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 8,
   },
   headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
   },
   backButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   headerTextContainer: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   headerSubtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: "rgba(255, 255, 255, 0.9)",
     marginTop: 2,
   },
   resetButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   content: {
     flex: 1,
@@ -678,21 +859,21 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 6,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: "#E5E7EB",
     borderRadius: 3,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressFill: {
-    height: '100%',
-    backgroundColor: '#10B981',
+    height: "100%",
+    backgroundColor: "#10B981",
     borderRadius: 3,
   },
   progressText: {
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 8,
     fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
+    color: "#6B7280",
+    fontWeight: "500",
   },
   formContainer: {
     flex: 1,
@@ -703,15 +884,15 @@ const styles = StyleSheet.create({
   },
   stepTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: "bold",
+    color: "#1F2937",
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   stepSubtitle: {
     fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
+    color: "#6B7280",
+    textAlign: "center",
     marginBottom: 30,
   },
   inputGroup: {
@@ -719,55 +900,55 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: "600",
+    color: "#374151",
     marginBottom: 8,
   },
   textInput: {
     borderWidth: 2,
-    borderColor: '#D1FAE5',
+    borderColor: "#D1FAE5",
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    backgroundColor: 'white',
-    color: '#1F2937',
+    backgroundColor: "white",
+    color: "#1F2937",
   },
   dropdownContainer: {
     marginBottom: 20,
   },
   dropdownLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: "600",
+    color: "#374151",
     marginBottom: 12,
   },
   optionsScroll: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   optionChip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 20,
     marginRight: 10,
     borderWidth: 2,
-    borderColor: '#D1FAE5',
+    borderColor: "#D1FAE5",
   },
   selectedChip: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: "#10B981",
+    borderColor: "#10B981",
   },
   optionText: {
     fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
+    color: "#374151",
+    fontWeight: "500",
   },
   selectedText: {
-    color: 'white',
+    color: "white",
   },
   navigationContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 20,
     paddingVertical: 16,
     gap: 12,
@@ -775,109 +956,109 @@ const styles = StyleSheet.create({
   prevButton: {
     flex: 0.4,
     paddingVertical: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   prevButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: "600",
+    color: "#6B7280",
   },
   nextButton: {
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   nextButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 16,
     gap: 8,
   },
   nextButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
+    fontWeight: "600",
+    color: "white",
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: "#F0FDF4",
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: "#E5E7EB",
   },
   closeButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
   },
   newPlanButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#10B981',
+    backgroundColor: "#10B981",
     borderRadius: 8,
   },
   newPlanText: {
-    color: 'white',
-    fontWeight: '600',
+    color: "white",
+    fontWeight: "600",
   },
   resultsContainer: {
     flex: 1,
     paddingHorizontal: 20,
   },
   resultsHeader: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 20,
   },
   resultsTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: "bold",
+    color: "#1F2937",
     marginBottom: 8,
   },
   caloriesText: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#10B981',
+    fontWeight: "bold",
+    color: "#10B981",
   },
   bmiText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: "#6B7280",
     marginTop: 8,
   },
   errorContainer: {
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   errorText: {
     fontSize: 16,
-    color: '#EF4444',
+    color: "#EF4444",
   },
   loaderContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: 100,
   },
   loaderText: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: "600",
+    color: "#1F2937",
     marginTop: 20,
   },
   loaderSubtext: {
     fontSize: 14,
-    color: '#6B7280',
+    color: "#6B7280",
     marginTop: 8,
   },
   sectionContainer: {
@@ -885,22 +1066,22 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: "bold",
+    color: "#1F2937",
     marginBottom: 16,
   },
   nutrientGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   nutrientCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 12,
     borderRadius: 12,
-    minWidth: '45%',
-    alignItems: 'center',
-    shadowColor: '#000',
+    minWidth: "45%",
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -908,45 +1089,45 @@ const styles = StyleSheet.create({
   },
   nutrientValue: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#10B981',
+    fontWeight: "bold",
+    color: "#10B981",
     marginBottom: 4,
   },
   nutrientLabel: {
     fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
+    color: "#6B7280",
+    textAlign: "center",
   },
   mealCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   mealHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 8,
   },
   mealType: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#10B981',
+    fontWeight: "bold",
+    color: "#10B981",
   },
   mealTime: {
     fontSize: 14,
-    color: '#6B7280',
+    color: "#6B7280",
   },
   mealCalories: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#F59E0B',
+    fontWeight: "600",
+    color: "#F59E0B",
     marginBottom: 8,
   },
   mealItems: {
@@ -954,69 +1135,69 @@ const styles = StyleSheet.create({
   },
   mealItem: {
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
     marginBottom: 4,
   },
   mealDescription: {
     fontSize: 13,
-    color: '#6B7280',
-    fontStyle: 'italic',
+    color: "#6B7280",
+    fontStyle: "italic",
     marginTop: 4,
   },
   mealSuggestion: {
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
     lineHeight: 20,
   },
   infoText: {
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
     lineHeight: 22,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 12,
     borderRadius: 8,
   },
   tipItem: {
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
     marginBottom: 8,
     lineHeight: 20,
   },
   avoidList: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: "#FEF2F2",
     padding: 12,
     borderRadius: 8,
   },
   avoidItem: {
     fontSize: 14,
-    color: '#DC2626',
+    color: "#DC2626",
     marginBottom: 4,
   },
   insightsText: {
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
     lineHeight: 22,
-    backgroundColor: '#F0F9FF',
+    backgroundColor: "#F0F9FF",
     padding: 12,
     borderRadius: 8,
   },
   loadingOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 1000,
   },
   loadingCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 20,
     padding: 40,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -1025,19 +1206,19 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: "600",
+    color: "#1F2937",
     marginTop: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   loadingSubtext: {
     fontSize: 14,
-    color: '#6B7280',
+    color: "#6B7280",
     marginTop: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   loadingDots: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: 20,
     gap: 8,
   },
@@ -1045,7 +1226,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10B981',
+    backgroundColor: "#10B981",
   },
   dot1: {
     opacity: 0.3,

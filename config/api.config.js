@@ -15,7 +15,7 @@
 // ===========================================
 export const API_KEYS = {
   GOOGLE_GEMINI:
-    process.env.GOOGLE_API_KEY || "AIzaSyAAqtKe6EZAm3l5be3Lfbj7iKmXaOb2Cnk",
+    process.env.GOOGLE_API_KEY || "AIzaSyBRs8xZndRHo_I46qwlv4OklK_J93fwDC8",
   // Add other API keys here as needed
 };
 
@@ -32,7 +32,7 @@ const BASE_URLS = {
   // Machine Learning Services
   // Change these IP addresses to your server IPs
   DISEASE_PREDICTION: "http://172.30.179.246:5009",
-  DIABETES_PREDICTION: "http://172.30.179.246:5005",
+  DIABETES_PREDICTION: "http://10.101.194.246:5005",
   SKIN_DISEASE: "http://172.30.179.246:5002",
   EYE_CONDITION: "http://172.30.179.246:5000", // Update this to your actual eye condition server
   EMAIL_SERVICE: "http://172.30.179.246:5008",
@@ -69,6 +69,7 @@ export const API_ENDPOINTS = {
       `${BASE_URLS.GEMINI}/${model}:generateContent?key=${API_KEYS.GOOGLE_GEMINI}`,
     GENERATE_FLASH: `${BASE_URLS.GEMINI}/gemini-2.5-flash:generateContent?key=${API_KEYS.GOOGLE_GEMINI}`,
     GENERATE_EXP: `${BASE_URLS.GEMINI}/gemini-2.0-flash-exp:generateContent?key=${API_KEYS.GOOGLE_GEMINI}`,
+    GENERATE_LITE: `${BASE_URLS.GEMINI}/gemini-2.0-flash-vision:generateContent?key=${API_KEYS.GOOGLE_GEMINI}`,
   },
 
   // Machine Learning Prediction Services

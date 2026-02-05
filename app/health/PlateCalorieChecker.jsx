@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { config } from "../../config/env";
+import { API_ENDPOINTS, API_KEYS } from "../../config/api.config";
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
@@ -200,10 +200,10 @@ const PlateCalorieChecker = () => {
     setIsAnalyzing(true);
     try {
       // Log API key (masked for security)
-      const maskedKey = config.GOOGLE_API_KEY
-        ? config.GOOGLE_API_KEY.substring(0, 8) +
+      const maskedKey = API_KEYS.GOOGLE_GEMINI
+        ? API_KEYS.GOOGLE_GEMINI.substring(0, 8) +
           "..." +
-          config.GOOGLE_API_KEY.slice(-4)
+          API_KEYS.GOOGLE_GEMINI.slice(-4)
         : "NOT SET";
       console.log("Using API Key:", maskedKey);
       console.log("Selected image:", selectedImage);
@@ -215,11 +215,11 @@ const PlateCalorieChecker = () => {
 
       console.log("Image converted to base64, length:", base64Image.length);
 
-      // Call Gemini API using gemini-2.0-flash-exp (Gemini 2.0 with vision support)
-      const apiUrl = API_ENDPOINTS.GEMINI.GENERATE_EXP;
+      // Call Gemini API - Use gemini-2.0-flash-exp
+      const apiUrl = API_ENDPOINTS.GEMINI.GENERATE_FLASH;
       console.log(
         "Calling API:",
-        apiUrl.replace(config.GOOGLE_API_KEY, "API_KEY_HIDDEN"),
+        apiUrl.replace(API_KEYS.GOOGLE_GEMINI, "API_KEY_HIDDEN"),
       );
 
       const response = await fetch(apiUrl, {
@@ -232,52 +232,15 @@ const PlateCalorieChecker = () => {
             {
               parts: [
                 {
-                  text: `You are an expert nutritionist AI. Analyze this food image carefully, even if the photo quality is not perfect. Do your best to identify food items even in blurry, dark, or unclear photos.
+                  text: `Analyze this food image. List ALL visible food items with calorie estimates.
 
-IMPORTANT: You MUST provide a response for ANY food image, regardless of quality. Make your best educated estimate.
-
-Provide a detailed nutritional breakdown. Return ONLY a valid JSON object (no markdown, no code blocks, no extra text) with this exact structure:
-
+Return ONLY valid JSON (no markdown):
 {
-  "confidence": <number 0-100 (even for unclear photos, give at least 60-70)>,
-  "totalCalories": <number (estimated total)>,
-  "servingSize": "<string like 'Medium plate' or '1 bowl'>",
-  "detectedFoods": [
-    {
-      "name": "<food name - make best guess if unclear>",
-      "quantity": "<estimated amount like '1 cup', '100g'>",
-      "calories": <number>,
-      "percentage": <number 0-100 of total calories>,
-      "nutrition": {
-        "carbs": <number in grams>,
-        "protein": <number in grams>,
-        "fat": <number in grams>,
-        "fiber": <number in grams>
-      }
-    }
-  ],
-  "nutritionSummary": {
-    "totalCarbs": <sum of all carbs>,
-    "totalProtein": <sum of all protein>,
-    "totalFat": <sum of all fat>,
-    "totalFiber": <sum of all fiber>
-  },
-  "healthInsights": {
-    "rating": "<Excellent/Good/Fair/Poor>",
-    "positives": ["<positive aspect 1>", "<positive aspect 2>"],
-    "improvements": ["<suggestion 1>", "<suggestion 2>"]
-  }
+  "totalCalories": <number>,
+  "foods": [{"name": "<food>", "calories": <number>}]
 }
 
-Rules:
-- ALWAYS provide a complete response, even for unclear/blurry photos
-- Make educated estimates based on visible colors, shapes, and portions
-- If you can't identify specific items, use general categories (e.g., "grain dish", "protein source", "vegetables")
-- Provide reasonable calorie estimates based on typical serving sizes
-- Include at least 2-3 detected food items minimum
-- Be helpful and provide a response rather than refusing
-
-Return ONLY the JSON object, nothing else.`,
+Be complete and accurate.`,
                 },
                 {
                   inline_data: {
@@ -289,46 +252,39 @@ Return ONLY the JSON object, nothing else.`,
             },
           ],
           generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
+            temperature: 0.3,
             maxOutputTokens: 2048,
           },
-          safetySettings: [
-            {
-              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-              threshold: "BLOCK_NONE",
-            },
-          ],
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.log("API Error Response:", response.status, errorData);
+        const errorText = await response.text();
+        console.error("API Error:", response.status, errorText);
 
         if (response.status === 429) {
-          // Check actual error message from API
-          const errorMsg = errorData?.error?.message || "";
-          console.log("Rate limit error details:", errorMsg);
           throw new Error("RATE_LIMIT");
-        } else if (response.status === 400) {
-          const errorMsg = errorData?.error?.message || "Invalid request";
-          console.log("Bad request error:", errorMsg);
-          throw new Error(errorMsg);
         } else if (response.status === 403) {
           throw new Error("API_KEY_INVALID");
         } else {
-          const errorMsg =
-            errorData?.error?.message || `API error: ${response.status}`;
-          throw new Error(errorMsg);
+          throw new Error(`API error: ${response.status}`);
         }
       }
 
       const data = await response.json();
+      console.log("API Response:", JSON.stringify(data, null, 2));
 
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
         const resultText = data.candidates[0].content.parts[0].text;
+        const finishReason = data.candidates[0].finishReason;
+
+        console.log("Raw result:", resultText);
+        console.log("Finish reason:", finishReason);
+
+        // Handle truncated response
+        if (finishReason === "MAX_TOKENS") {
+          console.warn("Response was truncated due to MAX_TOKENS");
+        }
 
         // Clean the response - remove markdown code blocks if present
         let cleanedText = resultText.trim();
@@ -336,7 +292,27 @@ Return ONLY the JSON object, nothing else.`,
         cleanedText = cleanedText.replace(/```\s*/g, "");
         cleanedText = cleanedText.trim();
 
+        // Fix incomplete JSON if needed
+        if (!cleanedText.endsWith("}") && !cleanedText.endsWith("]")) {
+          console.log("Fixing incomplete JSON...");
+          // Try to close incomplete structures
+          const openBraces = (cleanedText.match(/{/g) || []).length;
+          const closeBraces = (cleanedText.match(/}/g) || []).length;
+          const openBrackets = (cleanedText.match(/\[/g) || []).length;
+          const closeBrackets = (cleanedText.match(/\]/g) || []).length;
+
+          for (let i = 0; i < openBrackets - closeBrackets; i++) {
+            cleanedText += "]";
+          }
+          for (let i = 0; i < openBraces - closeBraces; i++) {
+            cleanedText += "}";
+          }
+        }
+
+        console.log("Cleaned text:", cleanedText);
         const analysisData = JSON.parse(cleanedText);
+        console.log("Parsed data:", analysisData);
+
         setAnalysisResult(analysisData);
         setCurrentStep(3);
       } else {
@@ -682,10 +658,7 @@ Return ONLY the JSON object, nothing else.`,
               <View style={styles.calorieHeader}>
                 <View style={styles.calorieInfo}>
                   <Text style={styles.totalCalories}>
-                    {analysisResult.totalCalories ??
-                      analysisResult.total_calories ??
-                      analysisResult.calorie_analysis?.total_calories ??
-                      "N/A"}
+                    {analysisResult.totalCalories || "N/A"}
                   </Text>
                   <Text style={styles.calorieUnit}>calories</Text>
                 </View>
@@ -695,27 +668,12 @@ Return ONLY the JSON object, nothing else.`,
             {/* Detected Foods */}
             <View style={styles.foodsCard}>
               <Text style={styles.foodsTitle}>Detected Food Items</Text>
-              {Array.isArray(analysisResult.detectedFoods) ? (
-                analysisResult.detectedFoods.map((food, index) => (
+              {Array.isArray(analysisResult.foods) &&
+              analysisResult.foods.length > 0 ? (
+                analysisResult.foods.map((food, index) => (
                   <View key={index} style={styles.foodItem}>
                     <View style={styles.foodInfo}>
                       <Text style={styles.foodName}>{food.name}</Text>
-                      <Text style={styles.foodQuantity}>{food.quantity}</Text>
-                    </View>
-                    <View style={styles.foodCalories}>
-                      <Text style={styles.foodCalorieValue}>
-                        {food.calories}
-                      </Text>
-                      <Text style={styles.foodCalorieUnit}>cal</Text>
-                    </View>
-                  </View>
-                ))
-              ) : Array.isArray(analysisResult.food_items) ? (
-                analysisResult.food_items.map((food, index) => (
-                  <View key={index} style={styles.foodItem}>
-                    <View style={styles.foodInfo}>
-                      <Text style={styles.foodName}>{food.name}</Text>
-                      <Text style={styles.foodQuantity}>{food.portion}</Text>
                     </View>
                     <View style={styles.foodCalories}>
                       <Text style={styles.foodCalorieValue}>
@@ -732,286 +690,8 @@ Return ONLY the JSON object, nothing else.`,
               )}
             </View>
 
-            {/* Nutrition Breakdown */}
-            <View style={styles.nutritionCard}>
-              <Text style={styles.nutritionTitle}>Nutrition Breakdown</Text>
-              {analysisResult.nutritionSummary &&
-              analysisResult.nutritionSummary.macroBreakdown ? (
-                <View style={styles.macroChart}>
-                  <View style={styles.macroItem}>
-                    <View
-                      style={[styles.macroBar, { backgroundColor: "#FF8A50" }]}
-                    >
-                      <View
-                        style={[
-                          styles.macroFill,
-                          {
-                            width: `${analysisResult.nutritionSummary.macroBreakdown.carbs ?? 0}%`,
-                            backgroundColor: "#FF6B35",
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.macroLabel}>
-                      Carbs:{" "}
-                      {analysisResult.nutritionSummary.totalCarbs ?? "N/A"}g
-                    </Text>
-                    <Text style={styles.macroPercent}>
-                      {analysisResult.nutritionSummary.macroBreakdown.carbs ??
-                        "N/A"}
-                      %
-                    </Text>
-                  </View>
-                  <View style={styles.macroItem}>
-                    <View
-                      style={[styles.macroBar, { backgroundColor: "#4299E1" }]}
-                    >
-                      <View
-                        style={[
-                          styles.macroFill,
-                          {
-                            width: `${analysisResult.nutritionSummary.macroBreakdown.protein ?? 0}%`,
-                            backgroundColor: "#3182CE",
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.macroLabel}>
-                      Protein:{" "}
-                      {analysisResult.nutritionSummary.totalProtein ?? "N/A"}g
-                    </Text>
-                    <Text style={styles.macroPercent}>
-                      {analysisResult.nutritionSummary.macroBreakdown.protein ??
-                        "N/A"}
-                      %
-                    </Text>
-                  </View>
-                  <View style={styles.macroItem}>
-                    <View
-                      style={[styles.macroBar, { backgroundColor: "#48BB78" }]}
-                    >
-                      <View
-                        style={[
-                          styles.macroFill,
-                          {
-                            width: `${analysisResult.nutritionSummary.macroBreakdown.fat ?? 0}%`,
-                            backgroundColor: "#38A169",
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.macroLabel}>
-                      Fat: {analysisResult.nutritionSummary.totalFat ?? "N/A"}g
-                    </Text>
-                    <Text style={styles.macroPercent}>
-                      {analysisResult.nutritionSummary.macroBreakdown.fat ??
-                        "N/A"}
-                      %
-                    </Text>
-                  </View>
-                  <View style={styles.fiberInfo}>
-                    <Ionicons name="leaf" size={16} color="#48BB78" />
-                    <Text style={styles.fiberText}>
-                      Fiber:{" "}
-                      {analysisResult.nutritionSummary.totalFiber ?? "N/A"}g
-                    </Text>
-                  </View>
-                </View>
-              ) : analysisResult.nutritional_info ? (
-                <View style={{ marginTop: 8 }}>
-                  <Text style={styles.macroLabel}>
-                    Carbs: {analysisResult.nutritional_info.carbs ?? "N/A"}
-                  </Text>
-                  <Text style={styles.macroLabel}>
-                    Protein: {analysisResult.nutritional_info.protein ?? "N/A"}
-                  </Text>
-                  <Text style={styles.macroLabel}>
-                    Fat: {analysisResult.nutritional_info.fat ?? "N/A"}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={{ color: "#718096", fontSize: 12 }}>
-                  Nutrition details not available.
-                </Text>
-              )}
-            </View>
-
-            {/* Analysis Description */}
-            {analysisResult.analysis ||
-            analysisResult.calorie_analysis?.analysis ? (
-              <View style={styles.nutritionCard}>
-                <Text style={styles.nutritionTitle}>
-                  AI Nutritionist's Notes
-                </Text>
-                <Text style={{ color: "#2D3748", fontSize: 13 }}>
-                  {analysisResult.analysis ??
-                    analysisResult.calorie_analysis?.analysis}
-                </Text>
-              </View>
-            ) : null}
-
-            {/* Activity Equivalent */}
-            <View style={styles.activityCard}>
-              <Text style={styles.activityTitle}>
-                🔥 To Burn These Calories
-              </Text>
-              {Array.isArray(analysisResult.activityEquivalent) &&
-              analysisResult.activityEquivalent.length > 0 ? (
-                <View style={styles.activityList}>
-                  {analysisResult.activityEquivalent.map((activity, index) => (
-                    <View key={index} style={styles.activityItem}>
-                      <View style={styles.activityIcon}>
-                        <Ionicons
-                          name={
-                            activity.activity === "Walking"
-                              ? "walk"
-                              : activity.activity === "Cycling"
-                                ? "bicycle"
-                                : activity.activity === "Swimming"
-                                  ? "water"
-                                  : "fitness"
-                          }
-                          size={20}
-                          color="#FF8A50"
-                        />
-                      </View>
-                      <View style={styles.activityInfo}>
-                        <Text style={styles.activityName}>
-                          {activity.activity}
-                        </Text>
-                        <Text style={styles.activityDuration}>
-                          {activity.duration}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ) : Array.isArray(
-                  analysisResult.calorie_analysis?.activityEquivalent,
-                ) &&
-                analysisResult.calorie_analysis.activityEquivalent.length >
-                  0 ? (
-                <View style={styles.activityList}>
-                  {analysisResult.calorie_analysis.activityEquivalent.map(
-                    (activity, index) => (
-                      <View key={index} style={styles.activityItem}>
-                        <View style={styles.activityIcon}>
-                          <Ionicons
-                            name={
-                              activity.activity === "Walking"
-                                ? "walk"
-                                : activity.activity === "Cycling"
-                                  ? "bicycle"
-                                  : activity.activity === "Swimming"
-                                    ? "water"
-                                    : "fitness"
-                            }
-                            size={20}
-                            color="#FF8A50"
-                          />
-                        </View>
-                        <View style={styles.activityInfo}>
-                          <Text style={styles.activityName}>
-                            {activity.activity}
-                          </Text>
-                          <Text style={styles.activityDuration}>
-                            {activity.duration}
-                          </Text>
-                        </View>
-                      </View>
-                    ),
-                  )}
-                </View>
-              ) : (
-                <Text style={{ color: "#718096", fontSize: 12 }}>
-                  No activity equivalent data.
-                </Text>
-              )}
-            </View>
-
-            {/* Recommendations */}
-            <View style={styles.recommendationsCard}>
-              <Text style={styles.recommendationsTitle}>
-                💡 Health Recommendations
-              </Text>
-              {Array.isArray(analysisResult.recommendations) &&
-              analysisResult.recommendations.length > 0 ? (
-                analysisResult.recommendations.map((rec, index) => (
-                  <View key={index} style={styles.recommendationItem}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={16}
-                      color="#48BB78"
-                    />
-                    <Text style={styles.recommendationText}>{rec}</Text>
-                  </View>
-                ))
-              ) : (
-                <Text style={{ color: "#718096", fontSize: 12 }}>
-                  No recommendations available.
-                </Text>
-              )}
-            </View>
-
-            {/* Alternatives */}
-            <View style={styles.alternativesCard}>
-              <Text style={styles.alternativesTitle}>
-                🔄 Healthier Alternatives
-              </Text>
-              {Array.isArray(analysisResult.alternatives) &&
-              analysisResult.alternatives.length > 0 ? (
-                analysisResult.alternatives.map((alt, index) => (
-                  <View key={index} style={styles.alternativeItem}>
-                    <View style={styles.alternativeInfo}>
-                      <Text style={styles.alternativeName}>{alt.name}</Text>
-                      <Text style={styles.alternativeBenefit}>
-                        {alt.benefit}
-                      </Text>
-                    </View>
-                    <View style={styles.calorieChange}>
-                      <Text
-                        style={[
-                          styles.calorieChangeText,
-                          {
-                            color: alt.calorieDiff < 0 ? "#48BB78" : "#E53E3E",
-                          },
-                        ]}
-                      >
-                        {alt.calorieDiff > 0 ? "+" : ""}
-                        {alt.calorieDiff} cal
-                      </Text>
-                    </View>
-                  </View>
-                ))
-              ) : (
-                <Text style={{ color: "#718096", fontSize: 12 }}>
-                  No alternatives available.
-                </Text>
-              )}
-            </View>
-
             {/* Action Buttons */}
             <View style={styles.finalActions}>
-              <TouchableOpacity style={styles.saveButton}>
-                <LinearGradient
-                  colors={["#48BB78", "#38A169"]}
-                  style={styles.saveGradient}
-                >
-                  <Ionicons name="bookmark" size={20} color="white" />
-                  <Text style={styles.saveText}>Save Result</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.shareButton}>
-                <LinearGradient
-                  colors={["#4299E1", "#3182CE"]}
-                  style={styles.shareGradient}
-                >
-                  <Ionicons name="share" size={20} color="white" />
-                  <Text style={styles.shareText}>Share</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.newAnalysisButton}
                 onPress={resetAnalysis}
@@ -1021,7 +701,9 @@ Return ONLY the JSON object, nothing else.`,
                   style={styles.newAnalysisGradient}
                 >
                   <Ionicons name="camera" size={20} color="white" />
-                  <Text style={styles.newAnalysisText}>New Photo</Text>
+                  <Text style={styles.newAnalysisText}>
+                    Analyze Another Photo
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>

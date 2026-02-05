@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { API_ENDPOINTS } from "../../config/api.config";
+import { API_ENDPOINTS, API_KEYS } from "../../config/api.config";
 
 // Conditional import for LinearGradient with fallback
 let LinearGradient;
@@ -65,6 +65,11 @@ const BreastCancerRiskChatbot = () => {
   }, [messages]);
 
   const getGeminiResponse = async (question) => {
+    console.log("=== GEMINI API CALL START ===");
+    console.log("Question:", question);
+    console.log("API Endpoint:", API_ENDPOINTS.GEMINI.GENERATE_FLASH);
+    console.log("API Key exists:", !!API_KEYS.GOOGLE_GEMINI);
+
     try {
       const response = await fetch(API_ENDPOINTS.GEMINI.GENERATE_FLASH, {
         method: "POST",
@@ -137,24 +142,49 @@ Keep it informative, supportive, and professional with minimal emoji use.`,
         }),
       });
 
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error("API Error Response:", errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log("API Response received:", JSON.stringify(data, null, 2));
+      console.log("API Response received:", JSON.stringify(data, null, 2));
+
       if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        return data.candidates[0].content.parts[0].text;
+        const responseText = data.candidates[0].content.parts[0].text;
+        console.log(
+          "✅ Successfully extracted response text (length):",
+          responseText.length,
+        );
+        console.log("=== GEMINI API CALL END ===");
+        return responseText;
       } else {
+        console.error("❌ Invalid API response structure:", data);
         throw new Error("No valid response from API");
       }
     } catch (error) {
-      console.error("Error calling Gemini API:", error);
+      console.error("❌ Error calling Gemini API:");
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+      console.log("=== GEMINI API CALL END (WITH ERROR) ===");
       return "I apologize, but I'm having trouble connecting to my knowledge base right now. Please try again in a moment, or consider consulting with a healthcare professional for immediate assistance.";
     }
   };
 
   const sendMessage = async (messageText = inputText) => {
+    console.log("\n🔵 === SEND MESSAGE BUTTON CLICKED ===");
+    console.log("Input text:", messageText);
+    console.log("Input text length:", messageText.length);
+    console.log("Is loading:", isLoading);
+
     if (!messageText.trim()) {
+      console.log("❌ Message is empty, showing alert");
       Alert.alert(
         "Empty Message",
         "Please enter a question before submitting.",
@@ -162,13 +192,24 @@ Keep it informative, supportive, and professional with minimal emoji use.`,
       return;
     }
 
-    if (!GOOGLE_API_KEY) {
+    console.log("Checking API Key...");
+    console.log("API_KEYS object:", API_KEYS);
+    console.log("GOOGLE_GEMINI key exists:", !!API_KEYS.GOOGLE_GEMINI);
+    console.log(
+      "GOOGLE_GEMINI key value:",
+      API_KEYS.GOOGLE_GEMINI ? "[KEY PRESENT]" : "[KEY MISSING]",
+    );
+
+    if (!API_KEYS.GOOGLE_GEMINI) {
+      console.log("❌ API Key is missing!");
       Alert.alert(
         "Configuration Error",
         "API Key for Google Gemini LLM is missing. Please configure it properly.",
       );
       return;
     }
+
+    console.log("✅ All validations passed, creating user message");
 
     const userMessage = {
       id: Date.now(),
@@ -180,9 +221,11 @@ Keep it informative, supportive, and professional with minimal emoji use.`,
       }),
     };
 
+    console.log("Adding user message to chat:", userMessage);
     setMessages((prev) => [...prev, userMessage]);
     setInputText("");
     setIsLoading(true);
+    console.log("Loading state set to true");
 
     // Scroll to bottom after adding user message
     setTimeout(
@@ -191,7 +234,10 @@ Keep it informative, supportive, and professional with minimal emoji use.`,
     );
 
     try {
+      console.log("Calling Gemini API...");
       const response = await getGeminiResponse(messageText);
+      console.log("Response received from Gemini API");
+
       const botMessage = {
         id: Date.now() + 1,
         text: response,
@@ -201,8 +247,15 @@ Keep it informative, supportive, and professional with minimal emoji use.`,
           minute: "2-digit",
         }),
       };
+      console.log("Adding bot message to chat");
       setMessages((prev) => [...prev, botMessage]);
+      console.log("✅ Message sent successfully!");
     } catch (error) {
+      console.error("❌ Error in sendMessage catch block:");
+      console.error("Error:", error);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+
       const errorMessage = {
         id: Date.now() + 1,
         text: "I'm sorry, but I encountered an error while processing your question. Please try again or consult with a healthcare professional.",
@@ -216,6 +269,8 @@ Keep it informative, supportive, and professional with minimal emoji use.`,
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      console.log("Loading state set to false");
+      console.log("=== SEND MESSAGE COMPLETE ===\n");
     }
   };
 
@@ -387,7 +442,15 @@ Keep it informative, supportive, and professional with minimal emoji use.`,
                 styles.sendButton,
                 { opacity: !inputText.trim() || isLoading ? 0.5 : 1 },
               ]}
-              onPress={() => sendMessage()}
+              onPress={() => {
+                console.log("🔘 Send button pressed!");
+                console.log("Current input text:", inputText);
+                console.log(
+                  "Button disabled state:",
+                  !inputText.trim() || isLoading,
+                );
+                sendMessage();
+              }}
               disabled={!inputText.trim() || isLoading}
             >
               <LinearGradient
