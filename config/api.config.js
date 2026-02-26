@@ -15,13 +15,16 @@
 // ===========================================
 export const API_KEYS = {
   GOOGLE_GEMINI:
-    process.env.GOOGLE_API_KEY || "AIzaSyBRs8xZndRHo_I46qwlv4OklK_J93fwDC8",
+    process.env.GOOGLE_API_KEY || "AIzaSyB6nMgrCmx7UdwsRyOyQ4--EJ26kYHtyuc",
   // Add other API keys here as needed
 };
 
 // ===========================================
 // BASE URLs
 // ===========================================
+// Machine Learning Server IP - Change this single IP to update all ML services
+const ML_SERVER_IP = "10.118.121.246";
+
 const BASE_URLS = {
   FIREBASE:
     "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -29,13 +32,12 @@ const BASE_URLS = {
     "https://thanu-iot-default-rtdb.asia-southeast1.firebasedatabase.app",
   GEMINI: "https://generativelanguage.googleapis.com/v1beta/models",
 
-  // Machine Learning Services
-  // Change these IP addresses to your server IPs
-  DISEASE_PREDICTION: "http://172.30.179.246:5009",
-  DIABETES_PREDICTION: "http://10.101.194.246:5005",
-  SKIN_DISEASE: "http://172.30.179.246:5002",
-  EYE_CONDITION: "http://172.30.179.246:5000", // Update this to your actual eye condition server
-  EMAIL_SERVICE: "http://172.30.179.246:5008",
+  // Machine Learning Services - All use ML_SERVER_IP with different ports
+  DISEASE_PREDICTION: `http://${ML_SERVER_IP}:5009`,
+  DIABETES_PREDICTION: `http://${ML_SERVER_IP}:5005`,
+  SKIN_DISEASE: `http://${ML_SERVER_IP}:5002`,
+  EYE_CONDITION: `http://${ML_SERVER_IP}:5000`,
+  EMAIL_SERVICE: `http://${ML_SERVER_IP}:5008`,
 };
 
 // ===========================================
