@@ -1,4 +1,5 @@
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -175,13 +176,42 @@ const PrescriptionView = () => {
   const loadPrescriptionsData = async () => {
     try {
       setLoading(true);
-      // Simulate API call
-      setTimeout(() => {
-        setPrescriptions(samplePrescriptions);
+      
+      // Get patient email from session
+      const userSession = await AsyncStorage.getItem('userSession');
+      if (!userSession) {
+        setPrescriptions([]);
         setLoading(false);
-      }, 1000);
+        return;
+      }
+
+      const sessionData = JSON.parse(userSession);
+      const patientEmail = sessionData.email;
+
+      // Fetch prescriptions from Firebase
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/prescriptions.json'
+      );
+      const data = await response.json();
+
+      if (data) {
+        // Filter prescriptions for this patient
+        const patientPrescriptions = Object.entries(data)
+          .filter(([key, prescription]) => prescription.patientEmail === patientEmail)
+          .map(([key, prescription]) => ({
+            id: key,
+            ...prescription,
+          }));
+
+        setPrescriptions(patientPrescriptions);
+      } else {
+        setPrescriptions([]);
+      }
+
+      setLoading(false);
     } catch (error) {
       console.error('Error loading prescriptions:', error);
+      setPrescriptions([]);
       setLoading(false);
     }
   };

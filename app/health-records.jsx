@@ -35,7 +35,7 @@ const HealthRecordsScreen = () => {
     },
     heartRate: {
       current: 0,
-      unit: "BPM",
+      unit: "Raw_pulse",
       readings: [],
       times: [],
       status: "Loading...",
@@ -108,19 +108,19 @@ const HealthRecordsScreen = () => {
     setVitalReadings((prev) => ({
       temperature: {
         ...prev.temperature,
-        current: data.waterTempF || 0,
-        status: getTemperatureStatus(data.waterTempF),
+        current: data.dht_temp || 0,
+        status: getTemperatureStatus(data.dht_temp),
         readings: [
           ...prev.temperature.readings.slice(-6),
-          data.waterTempF || 0,
+          data.dht_temp || 0,
         ],
         times: [...prev.temperature.times.slice(-6), currentTime],
       },
       heartRate: {
         ...prev.heartRate,
-        current: data.BPM || 0,
-        status: getHeartRateStatus(data.BPM),
-        readings: [...prev.heartRate.readings.slice(-6), data.BPM || 0],
+        current: data.pulse || 0,
+        status: getHeartRateStatus(data.pulse),
+        readings: [...prev.heartRate.readings.slice(-6), data.pulse || 0],
         times: [...prev.heartRate.times.slice(-6), currentTime],
       },
       bloodPressure: {

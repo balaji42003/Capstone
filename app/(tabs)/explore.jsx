@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,13 @@ import {
   StatusBar,
   Platform,
   TextInput,
-  Dimensions
+  Dimensions,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { COLORS, GRADIENTS, MEDICAL_CATEGORIES, DOCTORS_DATA, TOP_SEARCHES } from '../../constants';
+import { COLORS, GRADIENTS, MEDICAL_CATEGORIES } from '../../constants';
+import { API_ENDPOINTS } from '../../config/api.config';
 import DoctorCard from '../../components/DoctorCard';
 import CategoryCard from '../../components/CategoryCard';
 import SearchBar from '../../components/SearchBar';
@@ -24,17 +26,56 @@ const ExploreScreen = () => {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [doctorsData, setDoctorsData] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
 
   const medicalCategories = MEDICAL_CATEGORIES;
+
+  useEffect(() => {
+    loadDoctorsFromFirebase();
+  }, []);
+
+  const loadDoctorsFromFirebase = async () => {
+    try {
+      setLoadingDoctors(true);
+      const response = await fetch(API_ENDPOINTS.FIREBASE.DOCTORS);
+      const doctorsResponse = await response.json();
+
+      if (doctorsResponse) {
+        const doctorsArray = Object.keys(doctorsResponse).map((key) => ({
+          id: key,
+          ...doctorsResponse[key],
+          specialization: doctorsResponse[key].specialization || doctorsResponse[key].specialty || 'General Medicine',
+          specialty: doctorsResponse[key].specialization || doctorsResponse[key].specialty || 'General Medicine',
+        }))
+        .filter((doctor) => doctor.approvedAt && doctor.approvedAt !== null);
+
+        setDoctorsData(doctorsArray);
+      } else {
+        setDoctorsData([]);
+      }
+    } catch (error) {
+      console.error('Error loading doctors:', error);
+      setDoctorsData([]);
+    } finally {
+      setLoadingDoctors(false);
+    }
+  };
 
   const topSearches = [
     'Neurosurgeon', 'Heart Failure', 'Gene Therapy', 'Diabetes Care',
     'Cancer Treatment', 'Mental Health', 'Pediatrics', 'Emergency Care'
   ];
 
-  const filteredDoctors = DOCTORS_DATA.filter(doctor => 
-    selectedCategory === 'All' || doctor.specialty === selectedCategory
-  );
+  const filteredDoctors = doctorsData.filter(doctor => {
+    const matchesCategory = selectedCategory === 'All' || 
+      (doctor.specialty && doctor.specialty.toLowerCase().trim() === selectedCategory.toLowerCase().trim());
+    const matchesSearch = !searchQuery || 
+      (doctor.name && doctor.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (doctor.specialty && doctor.specialty.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    return matchesCategory && matchesSearch;
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -104,48 +145,60 @@ const ExploreScreen = () => {
             </TouchableOpacity>
           </View>
           
-          {filteredDoctors.map((doctor) => (
-            <TouchableOpacity 
-              key={doctor.id} 
-              style={styles.doctorListCard}
-              onPress={() => router.push('/doctor-profile')}
-            >
-              <View style={styles.doctorListContent}>
-                <View style={styles.doctorListLeft}>
-                  <View style={styles.ratingBadge}>
-                    <MaterialIcons name="star" size={14} color="#FFD700" />
-                    <Text style={styles.ratingText}>{doctor.rating}</Text>
-                  </View>
-                  
-                  <View style={styles.doctorListAvatar}>
-                    <Ionicons name="person" size={28} color="white" />
-                  </View>
-                </View>
-                
-                <View style={styles.doctorListDetails}>
-                  <Text style={styles.doctorListName}>{doctor.name}</Text>
-                  <Text style={styles.doctorListSpecialty}>{doctor.specialty}</Text>
-                  <Text style={styles.doctorListPrice}>${doctor.price}/session</Text>
-                  
-                  <View style={styles.availabilityInfo}>
-                    <Text style={styles.availabilityLabel}>Availability • 3 slots</Text>
-                    <View style={styles.availabilityDays}>
-                      <Text style={styles.daySlot}>Mon 17</Text>
-                      <Text style={styles.daySlot}>Tue 18</Text>
-                      <Text style={styles.daySlot}>Wed 19</Text>
-                      <Text style={[styles.daySlot, styles.selectedDaySlot]}>Thu 20</Text>
-                      <Text style={styles.daySlot}>Fri 21</Text>
-                      <Text style={styles.daySlot}>Sat 22</Text>
+          {loadingDoctors ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#667eea" />
+              <Text style={styles.loadingText}>Loading doctors...</Text>
+            </View>
+          ) : filteredDoctors.length > 0 ? (
+            filteredDoctors.map((doctor) => (
+              <TouchableOpacity 
+                key={doctor.id} 
+                style={styles.doctorListCard}
+                onPress={() => router.push('/doctor-profile')}
+              >
+                <View style={styles.doctorListContent}>
+                  <View style={styles.doctorListLeft}>
+                    <View style={styles.ratingBadge}>
+                      <MaterialIcons name="star" size={14} color="#FFD700" />
+                      <Text style={styles.ratingText}>{doctor.rating || '4.8'}</Text>
+                    </View>
+                    
+                    <View style={styles.doctorListAvatar}>
+                      <Ionicons name="person" size={28} color="white" />
                     </View>
                   </View>
+                  
+                  <View style={styles.doctorListDetails}>
+                    <Text style={styles.doctorListName}>{doctor.name || 'Dr. Unknown'}</Text>
+                    <Text style={styles.doctorListSpecialty}>{doctor.specialty || 'Specialist'}</Text>
+                    <Text style={styles.doctorListPrice}>{doctor.consultationFee ? `₹${doctor.consultationFee}/session` : 'Consultation Available'}</Text>
+                    
+                    <View style={styles.availabilityInfo}>
+                      <Text style={styles.availabilityLabel}>Availability • 3 slots</Text>
+                      <View style={styles.availabilityDays}>
+                        <Text style={styles.daySlot}>Mon 17</Text>
+                        <Text style={styles.daySlot}>Tue 18</Text>
+                        <Text style={styles.daySlot}>Wed 19</Text>
+                        <Text style={[styles.daySlot, styles.selectedDaySlot]}>Thu 20</Text>
+                        <Text style={styles.daySlot}>Fri 21</Text>
+                        <Text style={styles.daySlot}>Sat 22</Text>
+                      </View>
+                    </View>
+                  </View>
+                  
+                  <TouchableOpacity style={styles.favoriteButton}>
+                    <Ionicons name="heart-outline" size={20} color="#6B7280" />
+                  </TouchableOpacity>
                 </View>
-                
-                <TouchableOpacity style={styles.favoriteButton}>
-                  <Ionicons name="heart-outline" size={20} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="search-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyText}>No doctors found</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -363,6 +416,28 @@ const styles = StyleSheet.create({
   },
   favoriteButton: {
     padding: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#667eea',
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '500',
   },
 });
 

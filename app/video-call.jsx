@@ -23,6 +23,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { API_ENDPOINTS } from "../config/api.config";
 
 const { width, height } = Dimensions.get("window");
 
@@ -72,9 +73,9 @@ export default function VideoCall() {
   const translateY = useSharedValue(height - 200); // Start at bottom
 
   // TODO: Replace with your new Zego credentials
-  const yourAppID = 1078241982; // Replace with your new App ID
+  const yourAppID = 192646607; // Replace with your new App ID
   const yourAppSign =
-    "9f2be7124a30eb225c067e1b9fcba63279a2faa0f4de96fb9a3681a28c18c1a7"; // Replace with your new App Sign
+    "c154de456f2685fe3464c8432769ac9ef9af39df07e6be90578adea60a36d660"; // Replace with your new App Sign
 
   const callID = roomId;
   const displayName = userName;
@@ -134,13 +135,13 @@ export default function VideoCall() {
     setVitalReadings((prev) => ({
       temperature: {
         ...prev.temperature,
-        current: data.waterTempF || 0,
-        status: getTemperatureStatus(data.waterTempF),
+        current: data.dht_temp || 0,
+        status: getTemperatureStatus(data.dht_temp),
       },
       heartRate: {
         ...prev.heartRate,
-        current: data.BPM || 0,
-        status: getHeartRateStatus(data.BPM),
+        current: data.pulse || 0,
+        status: getHeartRateStatus(data.pulse),
       },
       bloodPressure: {
         ...prev.bloodPressure,

@@ -24,6 +24,7 @@ export default function RootLayout() {
         <Stack.Screen name="personal-information" options={{ headerShown: false }} />
         <Stack.Screen name="active-appointments" options={{ headerShown: false }} />
         <Stack.Screen name="prescription-view" options={{ headerShown: false }} />
+        <Stack.Screen name="add-prescription" options={{ headerShown: false }} />
         <Stack.Screen name="health-records" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>

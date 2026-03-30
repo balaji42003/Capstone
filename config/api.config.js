@@ -15,7 +15,7 @@
 // ===========================================
 export const API_KEYS = {
   GOOGLE_GEMINI:
-    process.env.GOOGLE_API_KEY || "AIzaSyB6nMgrCmx7UdwsRyOyQ4--EJ26kYHtyuc",
+    process.env.GOOGLE_API_KEY || "AIzaSyCAJv2nb48yZ0UOmUoJ4ZUZ6h6ZEVeusCY",
   // Add other API keys here as needed
 };
 
@@ -23,7 +23,7 @@ export const API_KEYS = {
 // BASE URLs
 // ===========================================
 // Machine Learning Server IP - Change this single IP to update all ML services
-const ML_SERVER_IP = "10.118.121.246";
+const ML_SERVER_IP = "10.2.14.180";
 
 const BASE_URLS = {
   FIREBASE:
@@ -51,6 +51,7 @@ export const API_ENDPOINTS = {
     USERS: `${BASE_URLS.FIREBASE}/users.json`,
     USER_DETAILS: `${BASE_URLS.FIREBASE}/user-details`,
     APPOINTMENTS: `${BASE_URLS.FIREBASE}/appointments.json`,
+    PRESCRIPTIONS: `${BASE_URLS.FIREBASE}/prescriptions.json`,
 
     // Dynamic endpoints (use with ID)
     DOCTOR_BY_ID: (id) => `${BASE_URLS.FIREBASE}/doctors/${id}.json`,
@@ -58,6 +59,7 @@ export const API_ENDPOINTS = {
     USER_DETAILS_BY_ID: (id) => `${BASE_URLS.FIREBASE}/user-details/${id}.json`,
     VERIFICATION_BY_ID: (id) => `${BASE_URLS.FIREBASE}/verification/${id}.json`,
     APPOINTMENT_BY_ID: (id) => `${BASE_URLS.FIREBASE}/appointments/${id}.json`,
+    PRESCRIPTION_BY_ID: (id) => `${BASE_URLS.FIREBASE}/prescriptions/${id}.json`,
   },
 
   // IoT Firebase

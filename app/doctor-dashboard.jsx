@@ -63,6 +63,8 @@ const DoctorDashboard = () => {
     pending: 0,
   });
   const [processingAppointment, setProcessingAppointment] = useState(null); // Add this state
+  const [prescriptions, setPrescriptions] = useState([]);
+  const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -181,6 +183,7 @@ const DoctorDashboard = () => {
   useEffect(() => {
     if (doctorId) {
       loadAppointmentsData();
+      loadPrescriptionsData();
 
       // Set up daily cleanup at 11:57 PM
       const setupDailyCleanup = () => {
@@ -217,7 +220,7 @@ const DoctorDashboard = () => {
         cleanupExpiredAppointments();
       }, 2000);
     }
-  }, [doctorId, loadAppointmentsData]);
+  }, [doctorId, loadAppointmentsData, loadPrescriptionsData]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -602,6 +605,53 @@ const DoctorDashboard = () => {
     }
   }, [doctorId]);
 
+  const loadPrescriptionsData = useCallback(async () => {
+    if (!doctorId) {
+      console.log("No doctor ID available, skipping prescriptions load");
+      return;
+    }
+
+    try {
+      setPrescriptionsLoading(true);
+      console.log("Loading prescriptions for doctor:", doctorId);
+      const response = await fetch(
+        "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/prescriptions.json",
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(
+        "Fetched prescriptions data:",
+        data ? Object.keys(data).length : 0,
+        "prescriptions",
+      );
+
+      if (data) {
+        // Filter prescriptions for this doctor
+        const doctorPrescriptions = Object.entries(data)
+          .filter(([key, prescription]) => prescription.doctorId === doctorId)
+          .map(([key, prescription]) => ({ id: key, ...prescription }));
+
+        console.log(
+          "Found",
+          doctorPrescriptions.length,
+          "prescriptions for doctor",
+        );
+        setPrescriptions(doctorPrescriptions);
+      } else {
+        console.log("No prescriptions data found");
+        setPrescriptions([]);
+      }
+    } catch (error) {
+      console.error("Error loading prescriptions data:", error);
+    } finally {
+      setPrescriptionsLoading(false);
+    }
+  }, [doctorId]);
+
   // Generate 5-digit room ID with digits and capital letters
   const generateRoomId = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -928,9 +978,9 @@ const DoctorDashboard = () => {
   // Bottom navigation tabs
   const bottomTabs = [
     { id: "Dashboard", icon: "grid", label: "Dashboard" },
+    { id: "Appointments", icon: "calendar", label: "Appointments" },
     { id: "Patients", icon: "people", label: "Patients" },
-    { id: "Schedule", icon: "calendar", label: "Schedule" },
-    { id: "Profile", icon: "person", label: "Profile" },
+    { id: "Prescriptions", icon: "document", label: "Prescriptions" },
   ];
 
   const renderIcon = (iconName, iconType, size = 24, color = "white") => {
@@ -1512,6 +1562,91 @@ const DoctorDashboard = () => {
                 <View style={styles.emptyState}>
                   <Ionicons name="people-outline" size={50} color="#ccc" />
                   <Text style={styles.emptyStateText}>No patients yet</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {activeTab === "Prescriptions" && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Prescriptions</Text>
+                <TouchableOpacity
+                  style={styles.addPrescriptionButton}
+                  onPress={() => router.push("/add-prescription")}
+                >
+                  <Ionicons name="add" size={20} color="white" />
+                  <Text style={styles.addPrescriptionButtonText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {prescriptionsLoading ? (
+                <View style={styles.centerContainer}>
+                  <Text>Loading prescriptions...</Text>
+                </View>
+              ) : prescriptions.length > 0 ? (
+                <View style={styles.prescriptionsList}>
+                  {prescriptions.map((prescription) => (
+                    <View key={prescription.id} style={styles.prescriptionCard}>
+                      <View style={styles.prescriptionCardHeader}>
+                        <View style={styles.prescriptionInfo}>
+                          <Text style={styles.prescriptionPatient}>
+                            {prescription.patientName}
+                          </Text>
+                          <Text style={styles.prescriptionEmail}>
+                            {prescription.patientEmail}
+                          </Text>
+                          <Text style={styles.prescriptionDiagnosis}>
+                            {prescription.diagnosis}
+                          </Text>
+                        </View>
+                        <Text style={styles.prescriptionDate}>
+                          {prescription.prescriptionDate}
+                        </Text>
+                      </View>
+                      
+                      <View style={styles.prescriptionMedicines}>
+                        <Text style={styles.medicinesCount}>
+                          {prescription.medicines?.length || 0} medicine{prescription.medicines?.length !== 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                      
+                      <View style={styles.prescriptionFooter}>
+                        <View style={styles.prescriptionNumber}>
+                          <Text style={styles.prescriptionNumberText}>
+                            #{prescription.prescriptionNumber}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.statusBadge,
+                            prescription.status === 'active'
+                              ? styles.activeBadge
+                              : styles.inactiveBadge,
+                          ]}
+                        >
+                          <Text style={styles.statusBadgeText}>
+                            {prescription.status}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.prescriptionPlaceholder}>
+                  <Ionicons name="document" size={50} color="#ccc" />
+                  <Text style={styles.emptyStateText}>
+                    No prescriptions yet
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.addPrescriptionButtonSecondary}
+                    onPress={() => router.push("/add-prescription")}
+                  >
+                    <Text style={styles.addPrescriptionButtonSecondaryText}>
+                      Create New Prescription
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -2870,6 +3005,138 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#94a3b8",
     marginTop: 12,
+  },
+  // Prescription styles
+  prescriptionPlaceholder: {
+    alignItems: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 16,
+  },
+  addPrescriptionButton: {
+    backgroundColor: "#4ECDC4",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  addPrescriptionButtonText: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  addPrescriptionButtonSecondary: {
+    backgroundColor: "#4ECDC4",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  addPrescriptionButtonSecondaryText: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  // Prescription List Styles
+  prescriptionsList: {
+    gap: 12,
+  },
+  prescriptionCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#4ECDC4",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  prescriptionCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  prescriptionInfo: {
+    flex: 1,
+  },
+  prescriptionPatient: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  prescriptionEmail: {
+    fontSize: 12,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  prescriptionDiagnosis: {
+    fontSize: 13,
+    color: "#4ECDC4",
+    fontWeight: "500",
+  },
+  prescriptionDate: {
+    fontSize: 12,
+    color: "#94a3b8",
+    fontWeight: "500",
+  },
+  prescriptionMedicines: {
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    marginBottom: 8,
+  },
+  medicinesCount: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  prescriptionFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  prescriptionNumber: {
+    backgroundColor: "#f0fdfa",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#4ECDC4",
+  },
+  prescriptionNumberText: {
+    fontSize: 11,
+    color: "#4ECDC4",
+    fontWeight: "600",
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  activeBadge: {
+    backgroundColor: "#dcfce7",
+  },
+  inactiveBadge: {
+    backgroundColor: "#fee2e2",
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#059669",
+    textTransform: "capitalize",
+  },
+  centerContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
   },
 });
 
