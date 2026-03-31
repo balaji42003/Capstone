@@ -2,6 +2,7 @@ import {
   FontAwesome5,
   Ionicons,
   MaterialCommunityIcons,
+  MaterialIcons,
 } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
@@ -62,9 +63,22 @@ const DoctorDashboard = () => {
     confirmed: 0,
     pending: 0,
   });
-  const [processingAppointment, setProcessingAppointment] = useState(null); // Add this state
+  const [processingAppointment, setProcessingAppointment] = useState(null);
   const [prescriptions, setPrescriptions] = useState([]);
   const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
+  const [consultationFee, setConsultationFee] = useState(0);
+  const [todayAppointments, setTodayAppointments] = useState(0);
+  const [uniquePatientsToday, setUniquePatientsToday] = useState(0);
+  const [todayRevenue, setTodayRevenue] = useState(0);
+  
+  // Prescription detail modal states
+  const [showPrescriptionDetail, setShowPrescriptionDetail] = useState(false);
+  const [selectedPrescriptionDetail, setSelectedPrescriptionDetail] = useState(null);
+  
+  // Lab test order states
+  const [labTestOrders, setLabTestOrders] = useState([]);
+  const [reportViewVisible, setReportViewVisible] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -115,12 +129,14 @@ const DoctorDashboard = () => {
                   "Medical Professional",
               );
               setDoctorTimings(doctorData.timings || {}); // Load existing timings
+              setConsultationFee(parseInt(doctorData.consultationFee) || 0); // Load consultation fee
               console.log("Doctor data loaded:", {
                 id: sessionDoctorId,
                 name: doctorData.name,
                 specialty: doctorData.specialty,
                 specialization: doctorData.specialization,
                 email: doctorData.email,
+                consultationFee: doctorData.consultationFee,
                 timings: doctorData.timings,
               });
             } else {
@@ -184,6 +200,7 @@ const DoctorDashboard = () => {
     if (doctorId) {
       loadAppointmentsData();
       loadPrescriptionsData();
+      loadLabTestOrdersData();
 
       // Set up daily cleanup at 11:57 PM
       const setupDailyCleanup = () => {
@@ -220,7 +237,7 @@ const DoctorDashboard = () => {
         cleanupExpiredAppointments();
       }, 2000);
     }
-  }, [doctorId, loadAppointmentsData, loadPrescriptionsData]);
+  }, [doctorId, loadAppointmentsData, loadPrescriptionsData, loadLabTestOrdersData]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -559,6 +576,7 @@ const DoctorDashboard = () => {
           doctorAppointments.length,
           "appointments for doctor",
         );
+        console.log("RAW DOCTOR APPOINTMENTS DATA:", JSON.stringify(doctorAppointments, null, 2));
         setAppointments(doctorAppointments);
 
         // Calculate stats
@@ -590,11 +608,58 @@ const DoctorDashboard = () => {
 
         console.log("Unique patients:", uniquePatients.length);
         setPatients(uniquePatients);
+
+        // Calculate today's stats
+        if (doctorAppointments.length > 0) {
+          const todayDate = new Date().toISOString().split('T')[0];
+          console.log("===== TODAY'S STATS CALCULATION =====");
+          console.log("Today's date:", todayDate);
+          console.log("Total appointments:", doctorAppointments.length);
+          console.log("Consultation fee from state:", consultationFee);
+          console.log("All appointments:", JSON.stringify(doctorAppointments.slice(0, 3), null, 2));
+          
+          const todayAppointmentsList = doctorAppointments.filter(
+            (apt) => {
+              const aptDate = apt.selectedDate ? apt.selectedDate.split('T')[0] : apt.selectedDate;
+              const isToday = aptDate === todayDate;
+              const isConfirmed = apt.status === "confirmed";
+              console.log(`APT: selectedDate='${apt.selectedDate}' → parsed='${aptDate}', todayDate='${todayDate}', isToday=${isToday}, status='${apt.status}' (type: ${typeof apt.status}), isConfirmed=${isConfirmed}, MATCHES=${isToday && isConfirmed}`);
+              return isToday && isConfirmed;
+            }
+          );
+          
+          console.log("Today's CONFIRMED appointments:", todayAppointmentsList.length);
+          
+          const uniquePatientsTodaySet = new Set(
+            todayAppointmentsList.map((apt) => apt.patientEmail || apt.userEmail)
+          );
+          
+          const calculatedRevenue = todayAppointmentsList.length * (parseInt(consultationFee) || 0);
+          
+          console.log("Calculated stats:", {
+            todayAppointmentsCount: todayAppointmentsList.length,
+            uniquePatientsCount: uniquePatientsTodaySet.size,
+            fee: parseInt(consultationFee) || 0,
+            revenue: calculatedRevenue,
+          });
+          
+          setTodayAppointments(todayAppointmentsList.length);
+          setUniquePatientsToday(uniquePatientsTodaySet.size);
+          setTodayRevenue(calculatedRevenue);
+        } else {
+          // No appointments today, reset to 0
+          setTodayAppointments(0);
+          setUniquePatientsToday(0);
+          setTodayRevenue(0);
+        }
       } else {
         console.log("No appointments data found");
         setAppointments([]);
         setAppointmentStats({ total: 0, confirmed: 0, pending: 0 });
         setPatients([]);
+        setTodayAppointments(0);
+        setUniquePatientsToday(0);
+        setTodayRevenue(0);
       }
     } catch (error) {
       console.error("Error loading appointments data:", error);
@@ -603,7 +668,7 @@ const DoctorDashboard = () => {
         "Failed to load appointments. Please check your internet connection and try again.",
       );
     }
-  }, [doctorId]);
+  }, [doctorId, consultationFee]);
 
   const loadPrescriptionsData = useCallback(async () => {
     if (!doctorId) {
@@ -651,6 +716,55 @@ const DoctorDashboard = () => {
       setPrescriptionsLoading(false);
     }
   }, [doctorId]);
+
+  const loadLabTestOrdersData = useCallback(async () => {
+    try {
+      const response = await fetch(
+        "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json"
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data) {
+        const allLabOrders = Object.entries(data)
+          .map(([key, order]) => ({ id: key, ...order }));
+
+        console.log('DEBUG: Loaded lab orders:', allLabOrders.length, 'orders');
+        setLabTestOrders(allLabOrders);
+      } else {
+        setLabTestOrders([]);
+      }
+    } catch (error) {
+      console.error("Error loading lab test orders:", error);
+      setLabTestOrders([]);
+    }
+  }, []);
+
+  const getLabReportForPrescription = (prescriptionId) => {
+    if (!prescriptionId) {
+      console.warn('DEBUG: prescriptionId is null or undefined');
+      return null;
+    }
+    
+    const report = labTestOrders.find(order => {
+      return order.prescriptionId === prescriptionId && order.reportStatus === 'uploaded';
+    });
+    
+    if (!report) {
+      console.log('DEBUG: No report found for prescriptionId:', prescriptionId, 'Available orders:', labTestOrders.map(o => ({ id: o.id, prescriptionId: o.prescriptionId, reportStatus: o.reportStatus })));
+    }
+    
+    return report;
+  };
+
+  const handleViewReport = (report) => {
+    setSelectedReport(report);
+    setReportViewVisible(true);
+  };
 
   // Generate 5-digit room ID with digits and capital letters
   const generateRoomId = () => {
@@ -943,37 +1057,35 @@ const DoctorDashboard = () => {
     },
   ];
 
-  // Compact stats
+  // Compact stats - Updated with calculated values
   const todayStats = [
-    { label: "Patients", value: "24", icon: "people", color: "#4ECDC4" },
-    { label: "Appointments", value: "8", icon: "calendar", color: "#667eea" },
-    { label: "Revenue", value: "₹12K", icon: "wallet", color: "#f093fb" },
+    { label: "Patients", value: uniquePatientsToday.toString(), icon: "people", color: "#4ECDC4" },
+    { label: "Appointments", value: todayAppointments.toString(), icon: "calendar", color: "#667eea" },
+    { label: "Revenue", value: `₹${todayRevenue}`, icon: "wallet", color: "#f093fb" },
     { label: "Rating", value: "4.9", icon: "star", color: "#fbbf24" },
   ];
 
-  const upcomingAppointments = [
-    {
-      id: 1,
-      name: "Sarah Johnson",
-      time: "10:30 AM",
-      type: "Consultation",
-      avatar: "S",
-    },
-    {
-      id: 2,
-      name: "Mike Chen",
-      time: "11:15 AM",
-      type: "Follow-up",
-      avatar: "M",
-    },
-    {
-      id: 3,
-      name: "Emma Davis",
-      time: "2:00 PM",
-      type: "Check-up",
-      avatar: "E",
-    },
-  ];
+  // Upcoming appointments - Filter for future appointments (after today)
+  const upcomingAppointments = (() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return appointments
+      .filter((apt) => {
+        const aptDate = new Date(apt.selectedDate);
+        aptDate.setHours(0, 0, 0, 0);
+        return aptDate > today && apt.status === "confirmed"; // Only future confirmed appointments
+      })
+      .sort((a, b) => new Date(a.selectedDate) - new Date(b.selectedDate))
+      .slice(0, 5) // Show top 5 upcoming
+      .map((apt) => ({
+        id: apt.id,
+        name: apt.patientName || apt.userName || "Patient",
+        time: apt.selectedTime || apt.appointmentTime || "N/A",
+        type: apt.appointmentType || "Consultation",
+        avatar: (apt.patientName || apt.userName || "P")[0]?.toUpperCase() || "P",
+      }));
+  })();
 
   // Bottom navigation tabs
   const bottomTabs = [
@@ -1184,36 +1296,40 @@ const DoctorDashboard = () => {
                   </TouchableOpacity>
                 </View>
                 <View style={styles.appointmentsContainer}>
-                  {upcomingAppointments.map((appointment) => (
-                    <TouchableOpacity
-                      key={appointment.id}
-                      style={styles.appointmentCard}
-                    >
-                      <View style={styles.appointmentInfo}>
-                        <View style={styles.patientAvatar}>
-                          <Text style={styles.avatarText}>
-                            {appointment.avatar}
-                          </Text>
+                  {upcomingAppointments.length > 0 ? (
+                    upcomingAppointments.map((appointment) => (
+                      <TouchableOpacity
+                        key={appointment.id}
+                        style={styles.appointmentCard}
+                      >
+                        <View style={styles.appointmentInfo}>
+                          <View style={styles.patientAvatar}>
+                            <Text style={styles.avatarText}>
+                              {appointment.avatar}
+                            </Text>
+                          </View>
+                          <View style={styles.appointmentDetails}>
+                            <Text style={styles.patientName}>
+                              {appointment.name}
+                            </Text>
+                            <Text style={styles.appointmentType}>
+                              {appointment.type}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.appointmentDetails}>
-                          <Text style={styles.patientName}>
-                            {appointment.name}
-                          </Text>
-                          <Text style={styles.appointmentType}>
-                            {appointment.type}
-                          </Text>
+                        <View style={styles.appointmentTime}>
+                          <Text style={styles.timeText}>{appointment.time}</Text>
+                          <Ionicons
+                            name="chevron-forward"
+                            size={16}
+                            color="#94a3b8"
+                          />
                         </View>
-                      </View>
-                      <View style={styles.appointmentTime}>
-                        <Text style={styles.timeText}>{appointment.time}</Text>
-                        <Ionicons
-                          name="chevron-forward"
-                          size={16}
-                          color="#94a3b8"
-                        />
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <Text style={styles.noAppointmentsText}>No upcoming appointments</Text>
+                  )}
                 </View>
               </View>
 
@@ -1587,7 +1703,15 @@ const DoctorDashboard = () => {
               ) : prescriptions.length > 0 ? (
                 <View style={styles.prescriptionsList}>
                   {prescriptions.map((prescription) => (
-                    <View key={prescription.id} style={styles.prescriptionCard}>
+                    <TouchableOpacity
+                      key={prescription.id}
+                      style={styles.prescriptionCard}
+                      onPress={() => {
+                        setSelectedPrescriptionDetail(prescription);
+                        setShowPrescriptionDetail(true);
+                      }}
+                      activeOpacity={0.7}
+                    >
                       <View style={styles.prescriptionCardHeader}>
                         <View style={styles.prescriptionInfo}>
                           <Text style={styles.prescriptionPatient}>
@@ -1630,7 +1754,12 @@ const DoctorDashboard = () => {
                           </Text>
                         </View>
                       </View>
-                    </View>
+                      
+                      <View style={styles.prescriptionCardFooter}>
+                        <Text style={styles.tapToViewText}>Tap to view details</Text>
+                        <Ionicons name="chevron-forward" size={18} color="#4ECDC4" />
+                      </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               ) : (
@@ -1683,6 +1812,286 @@ const DoctorDashboard = () => {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Prescription Detail Modal */}
+      <Modal
+        visible={showPrescriptionDetail}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowPrescriptionDetail(false)}
+      >
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="light-content" backgroundColor="#4ECDC4" />
+
+          {/* Modal Header */}
+          <LinearGradient
+            colors={["#4ECDC4", "#44A08D"]}
+            style={styles.prescriptionHeader}
+          >
+            <TouchableOpacity
+              onPress={() => setShowPrescriptionDetail(false)}
+              style={styles.headerButton}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.prescriptionHeaderTitle}>Prescription Details</Text>
+            <View style={styles.headerButton} />
+          </LinearGradient>
+
+          {selectedPrescriptionDetail && (
+            <ScrollView style={styles.prescriptionDocumentContainer} showsVerticalScrollIndicator={false}>
+              {/* Document Header */}
+              <View style={styles.prescriptionDocumentHeader}>
+                <Text style={styles.prescriptionDocumentTitle}>MEDICAL PRESCRIPTION</Text>
+                <View style={styles.prescriptionDividerLine} />
+
+                <View style={styles.prescriptionInfoRow}>
+                  <View style={styles.prescriptionInfoLeft}>
+                    <Text style={styles.prescriptionLabel}>Prescription No:</Text>
+                    <Text style={styles.prescriptionValue}>{selectedPrescriptionDetail.prescriptionNumber}</Text>
+                  </View>
+                  <View style={styles.prescriptionInfoRight}>
+                    <Text style={styles.prescriptionLabel}>Date:</Text>
+                    <Text style={styles.prescriptionValue}>{selectedPrescriptionDetail.prescriptionDate}</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Document Body */}
+              <View style={styles.prescriptionDocumentBody}>
+                
+                {/* Patient Info Section */}
+                <View style={styles.prescriptionSection}>
+                  <Text style={styles.prescriptionSectionTitle}>PATIENT INFORMATION</Text>
+                  <View style={styles.prescriptionInformationBox}>
+                    <View style={styles.prescriptionInfoField}>
+                      <Text style={styles.prescriptionFieldLabel}>Name:</Text>
+                      <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.patientName}</Text>
+                    </View>
+                    <View style={styles.prescriptionInfoField}>
+                      <Text style={styles.prescriptionFieldLabel}>Email:</Text>
+                      <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.patientEmail}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Diagnosis Section */}
+                <View style={styles.prescriptionSection}>
+                  <Text style={styles.prescriptionSectionTitle}>DIAGNOSIS</Text>
+                  <View style={styles.prescriptionDocument}>
+                    <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.diagnosis}</Text>
+                  </View>
+                </View>
+
+                {/* Symptoms Section */}
+                {selectedPrescriptionDetail.symptoms && selectedPrescriptionDetail.symptoms.length > 0 && (
+                  <View style={styles.prescriptionSection}>
+                    <Text style={styles.prescriptionSectionTitle}>SYMPTOMS</Text>
+                    <View style={styles.prescriptionDocument}>
+                      <Text style={styles.prescriptionFieldValue}>
+                        {Array.isArray(selectedPrescriptionDetail.symptoms) 
+                          ? selectedPrescriptionDetail.symptoms.join(', ') 
+                          : selectedPrescriptionDetail.symptoms}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Medicines Section */}
+                <View style={styles.prescriptionSection}>
+                  <Text style={styles.prescriptionSectionTitle}>PRESCRIBED MEDICINES</Text>
+                  
+                  <View style={styles.prescriptionTableHeader}>
+                    <Text style={[styles.prescriptionTableHeaderText, { flex: 2 }]}>Medicine</Text>
+                    <Text style={[styles.prescriptionTableHeaderText, { flex: 1 }]}>Dosage</Text>
+                    <Text style={[styles.prescriptionTableHeaderText, { flex: 1.5 }]}>Frequency</Text>
+                    <Text style={[styles.prescriptionTableHeaderText, { flex: 1 }]}>Duration</Text>
+                  </View>
+
+                  {selectedPrescriptionDetail.medicines && selectedPrescriptionDetail.medicines.map((medicine, index) => (
+                    <View key={index} style={styles.prescriptionTableRow}>
+                      <View style={[styles.prescriptionTableCell, { flex: 2 }]}>
+                        <Text style={styles.prescriptionTableCellText}>{medicine.name}</Text>
+                      </View>
+                      <View style={[styles.prescriptionTableCell, { flex: 1 }]}>
+                        <Text style={styles.prescriptionTableCellText}>{medicine.dosage}</Text>
+                      </View>
+                      <View style={[styles.prescriptionTableCell, { flex: 1.5 }]}>
+                        <Text style={styles.prescriptionTableCellText}>{medicine.frequency}</Text>
+                      </View>
+                      <View style={[styles.prescriptionTableCell, { flex: 1 }]}>
+                        <Text style={styles.prescriptionTableCellText}>{medicine.duration}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Doctor's Advice Section */}
+                {selectedPrescriptionDetail.advice && selectedPrescriptionDetail.advice.length > 0 && (
+                  <View style={styles.prescriptionSection}>
+                    <Text style={styles.prescriptionSectionTitle}>DOCTOR'S ADVICE</Text>
+                    {Array.isArray(selectedPrescriptionDetail.advice) 
+                      ? selectedPrescriptionDetail.advice.map((advice, index) => (
+                          <View key={index} style={styles.prescriptionAdviceRow}>
+                            <Text style={styles.prescriptionAdviceNumber}>• </Text>
+                            <Text style={styles.prescriptionAdviceText}>{advice}</Text>
+                          </View>
+                        ))
+                      : <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.advice}</Text>
+                    }
+                  </View>
+                )}
+
+                {/* Next Visit Section */}
+                {selectedPrescriptionDetail.nextVisit && (
+                  <View style={styles.prescriptionSection}>
+                    <Text style={styles.prescriptionSectionTitle}>NEXT VISIT</Text>
+                    <View style={styles.prescriptionDocument}>
+                      <Text style={styles.prescriptionFieldLabel}>Scheduled Date:</Text>
+                      <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.nextVisit}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Lab Tests Section */}
+                {selectedPrescriptionDetail.requestedLabTests && selectedPrescriptionDetail.requestedLabTests.length > 0 && (
+                  <View style={styles.prescriptionSection}>
+                    <View style={styles.prescriptionLabTestHeader}>
+                      <MaterialCommunityIcons name="flask" size={22} color="#4ECDC4" />
+                      <Text style={styles.prescriptionSectionTitle}>REQUESTED LAB TESTS</Text>
+                    </View>
+                    
+                    {selectedPrescriptionDetail.requestedLabTests.map((test, index) => {
+                      const hasReport = getLabReportForPrescription(selectedPrescriptionDetail.id) ? true : false;
+                      const displayStatus = hasReport ? 'completed' : test.status;
+                      
+                      return (
+                        <View key={index} style={styles.prescriptionLabTestCard}>
+                          <View style={styles.prescriptionLabTestCardHeader}>
+                            <View style={styles.prescriptionLabTestNumber}>
+                              <Text style={styles.prescriptionLabTestNumberText}>{index + 1}</Text>
+                            </View>
+                            <View style={styles.prescriptionLabTestInfo}>
+                              <Text style={styles.prescriptionLabTestName}>{test.testName}</Text>
+                              <Text style={styles.prescriptionLabTestDescription}>{test.testDescription}</Text>
+                            </View>
+                            <View style={[styles.prescriptionLabTestStatus, { backgroundColor: displayStatus === 'pending' ? '#fef3c7' : '#d1fae5' }]}>
+                              <Text style={[styles.prescriptionLabTestStatusText, { color: displayStatus === 'pending' ? '#b45309' : '#047857' }]}>
+                                {displayStatus === 'pending' ? 'Pending' : 'Completed'}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.prescriptionLabTestDateInfo}>
+                            <Ionicons name="calendar" size={14} color="#999" />
+                            <Text style={styles.prescriptionLabTestDate}>Requested: {test.requestedDate}</Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+
+                    {/* Lab Report Section */}
+                    {getLabReportForPrescription(selectedPrescriptionDetail.id) && (
+                      <View style={[styles.prescriptionSection, { marginTop: 20, backgroundColor: '#e8f5e9', borderLeftWidth: 4, borderLeftColor: '#4CAF50' }]}>
+                        <View style={styles.reportHeader}>
+                          <Ionicons name="document" size={24} color="#4CAF50" />
+                          <Text style={[styles.prescriptionSectionTitle, { color: '#4CAF50', marginLeft: 10 }]}>LAB REPORT</Text>
+                        </View>
+                        <View style={styles.reportInfo}>
+                          <Text style={styles.reportInfoText}>
+                            ✓ Report uploaded on {getLabReportForPrescription(selectedPrescriptionDetail.id).reportUploadedDate}
+                          </Text>
+                          <Text style={styles.reportInfoText}>
+                            Time: {getLabReportForPrescription(selectedPrescriptionDetail.id).reportUploadedTime}
+                          </Text>
+                          <Text style={styles.reportInfoText}>
+                            Patient: {getLabReportForPrescription(selectedPrescriptionDetail.id).patientName}
+                          </Text>
+                        </View>
+                        <TouchableOpacity 
+                          style={styles.viewReportButton}
+                          onPress={() => handleViewReport(getLabReportForPrescription(selectedPrescriptionDetail.id))}
+                        >
+                          <Ionicons name="image" size={18} color="white" />
+                          <Text style={styles.viewReportButtonText}>View Report Image</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+              </View>
+              
+              <View style={styles.prescriptionDocumentPadding} />
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Report View Modal */}
+      <Modal
+        visible={reportViewVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setReportViewVisible(false)}
+      >
+        <View style={styles.reportModalOverlay}>
+          <View style={styles.reportModalContainer}>
+            <View style={styles.reportModalHeader}>
+              <TouchableOpacity onPress={() => setReportViewVisible(false)}>
+                <Ionicons name="close" size={28} color="#1F2937" />
+              </TouchableOpacity>
+              <Text style={styles.reportModalTitle}>Lab Report</Text>
+              <View style={{ width: 28 }} />
+            </View>
+
+            {selectedReport && (
+              <ScrollView style={styles.reportModalContent}>
+                {/* Report Info */}
+                <View style={styles.reportDetailSection}>
+                  <Text style={styles.reportDetailLabel}>Test Report</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.testsList}</Text>
+                  
+                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>Uploaded Date</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.reportUploadedDate}</Text>
+                  
+                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>Uploaded Time</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.reportUploadedTime}</Text>
+                </View>
+
+                {/* Report Image */}
+                {selectedReport.reportImage && (
+                  <View style={styles.reportImageContainer}>
+                    <Text style={styles.reportImageLabel}>Report Image</Text>
+                    <Image
+                      source={{ uri: `data:image/jpeg;base64,${selectedReport.reportImage}` }}
+                      style={styles.reportImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                )}
+
+                {/* Patient Info */}
+                <View style={styles.reportDetailSection}>
+                  <Text style={styles.reportDetailLabel}>Patient Information</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.patientName}</Text>
+                  <Text style={[styles.reportDetailValue, { fontSize: 12, color: '#6B7280', marginTop: 4 }]}>
+                    {selectedReport.patientEmail}
+                  </Text>
+                  <Text style={[styles.reportDetailValue, { fontSize: 12, color: '#6B7280', marginTop: 2 }]}>
+                    {selectedReport.patientPhone}
+                  </Text>
+                </View>
+
+                {/* Diagnosis */}
+                <View style={styles.reportDetailSection}>
+                  <Text style={styles.reportDetailLabel}>Diagnosis</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.diagnosis}</Text>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Schedule Modal */}
       <Modal
@@ -2198,6 +2607,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#4ECDC4",
+  },
+  noAppointmentsText: {
+    fontSize: 14,
+    color: "#94a3b8",
+    fontStyle: "italic",
+    textAlign: "center",
+    paddingVertical: 20,
   },
 
   // Tools Grid
@@ -3137,6 +3553,357 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: 40,
+  },
+  // Prescription Detail Modal Styles
+  prescriptionHeader: {
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "ios" ? 50 : StatusBar.currentHeight + 20,
+    paddingBottom: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  prescriptionHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "white",
+    flex: 1,
+    textAlign: "center",
+  },
+  prescriptionDocumentContainer: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+  prescriptionDocumentHeader: {
+    backgroundColor: "white",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    borderBottomWidth: 2,
+    borderBottomColor: "#E5E7EB",
+  },
+  prescriptionDocumentTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1F2937",
+    textAlign: "center",
+    marginBottom: 12,
+    letterSpacing: 1,
+  },
+  prescriptionDividerLine: {
+    height: 2,
+    backgroundColor: "#4ECDC4",
+    marginBottom: 16,
+  },
+  prescriptionInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  prescriptionInfoLeft: {
+    flex: 1,
+  },
+  prescriptionInfoRight: {
+    flex: 1,
+    alignItems: "flex-end",
+  },
+  prescriptionLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  prescriptionValue: {
+    fontSize: 14,
+    color: "#1F2937",
+    fontWeight: "600",
+  },
+  prescriptionDocumentBody: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  prescriptionSection: {
+    marginBottom: 24,
+    backgroundColor: "white",
+    padding: 16,
+    borderRadius: 10,
+  },
+  prescriptionSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  prescriptionInformationBox: {
+    backgroundColor: "#f0fffe",
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#4ECDC4",
+  },
+  prescriptionInfoField: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  prescriptionFieldLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  prescriptionFieldValue: {
+    fontSize: 14,
+    color: "#1F2937",
+    fontWeight: "600",
+  },
+  prescriptionDocument: {
+    backgroundColor: "#f9fafb",
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#4ECDC4",
+  },
+  prescriptionTableHeader: {
+    flexDirection: "row",
+    backgroundColor: "#f3f4f6",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    marginBottom: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: "#4ECDC4",
+  },
+  prescriptionTableHeaderText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+  prescriptionTableRow: {
+    flexDirection: "row",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  prescriptionTableCell: {
+    justifyContent: "center",
+  },
+  prescriptionTableCellText: {
+    fontSize: 13,
+    color: "#374151",
+    fontWeight: "500",
+  },
+  prescriptionAdviceRow: {
+    flexDirection: "row",
+    marginBottom: 8,
+    alignItems: "flex-start",
+  },
+  prescriptionAdviceNumber: {
+    fontSize: 14,
+    color: "#4ECDC4",
+    fontWeight: "600",
+    marginRight: 8,
+  },
+  prescriptionAdviceText: {
+    fontSize: 13,
+    color: "#374151",
+    flex: 1,
+    lineHeight: 20,
+  },
+  prescriptionLabTestHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 16,
+  },
+  prescriptionLabTestCard: {
+    backgroundColor: "#f0fffe",
+    borderLeftWidth: 4,
+    borderLeftColor: "#4ECDC4",
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  prescriptionLabTestCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
+  },
+  prescriptionLabTestNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#4ECDC4",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  prescriptionLabTestNumberText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  prescriptionLabTestInfo: {
+    flex: 1,
+  },
+  prescriptionLabTestName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginBottom: 3,
+  },
+  prescriptionLabTestDescription: {
+    fontSize: 12,
+    color: "#6B7280",
+    lineHeight: 16,
+  },
+  prescriptionLabTestStatus: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  prescriptionLabTestStatusText: {
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  prescriptionLabTestDateInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingLeft: 44,
+  },
+  prescriptionLabTestDate: {
+    fontSize: 12,
+    color: "#999",
+    fontStyle: "italic",
+  },
+  prescriptionDocumentPadding: {
+    height: 30,
+  },
+  prescriptionCardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    marginTop: 8,
+  },
+  tapToViewText: {
+    fontSize: 12,
+    color: "#4ECDC4",
+    fontWeight: "500",
+  },
+  // Report Styles
+  reportHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  reportInfo: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  reportInfoText: {
+    fontSize: 13,
+    color: "#2E7D32",
+    fontWeight: "500",
+    marginBottom: 6,
+  },
+  viewReportButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 12,
+    gap: 8,
+  },
+  viewReportButtonText: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  reportModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  reportModalContainer: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    maxHeight: "90%",
+    width: "100%",
+    overflow: "hidden",
+  },
+  reportModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+  },
+  reportModalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+  reportModalContent: {
+    padding: 16,
+  },
+  reportDetailSection: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  reportDetailLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  reportDetailValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937",
+    lineHeight: 22,
+  },
+  reportImageContainer: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  reportImageLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  reportImage: {
+    width: "100%",
+    height: 400,
+    borderRadius: 8,
+    backgroundColor: "white",
   },
 });
 

@@ -26,6 +26,8 @@ export default function RootLayout() {
         <Stack.Screen name="prescription-view" options={{ headerShown: false }} />
         <Stack.Screen name="add-prescription" options={{ headerShown: false }} />
         <Stack.Screen name="health-records" options={{ headerShown: false }} />
+        <Stack.Screen name="order-status" options={{ headerShown: false }} />
+        <Stack.Screen name="pharmacy-orders" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />

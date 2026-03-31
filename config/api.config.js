@@ -52,6 +52,7 @@ export const API_ENDPOINTS = {
     USER_DETAILS: `${BASE_URLS.FIREBASE}/user-details`,
     APPOINTMENTS: `${BASE_URLS.FIREBASE}/appointments.json`,
     PRESCRIPTIONS: `${BASE_URLS.FIREBASE}/prescriptions.json`,
+    MEDICINE_ORDERS: `${BASE_URLS.FIREBASE}/medicine-orders.json`,
 
     // Dynamic endpoints (use with ID)
     DOCTOR_BY_ID: (id) => `${BASE_URLS.FIREBASE}/doctors/${id}.json`,
@@ -60,6 +61,7 @@ export const API_ENDPOINTS = {
     VERIFICATION_BY_ID: (id) => `${BASE_URLS.FIREBASE}/verification/${id}.json`,
     APPOINTMENT_BY_ID: (id) => `${BASE_URLS.FIREBASE}/appointments/${id}.json`,
     PRESCRIPTION_BY_ID: (id) => `${BASE_URLS.FIREBASE}/prescriptions/${id}.json`,
+    MEDICINE_ORDER_BY_ID: (id) => `${BASE_URLS.FIREBASE}/medicine-orders/${id}.json`,
   },
 
   // IoT Firebase

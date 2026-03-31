@@ -546,11 +546,11 @@ const HomeScreen = () => {
     },
     {
       id: "5",
-      title: "Join Video Call",
-      icon: "videocam",
+      title: "Order Status",
+      icon: "bag",
       colors: ["#4ECDC4", "#44D8A8"],
       bgColor: "#F0FFF8",
-      route: "/join-video-call",
+      route: "/order-status",
     },
   ];
 

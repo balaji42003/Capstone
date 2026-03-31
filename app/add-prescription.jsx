@@ -59,6 +59,51 @@ const AddPrescription = () => {
   const [advice, setAdvice] = useState("");
   const [nextVisit, setNextVisit] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  
+  // Lab test states
+  const [showLabTestModal, setShowLabTestModal] = useState(false);
+  const [showNeedsLabModal, setShowNeedsLabModal] = useState(false);
+  const [selectedLabTests, setSelectedLabTests] = useState([]);
+  const [prescriptionToSubmit, setPrescriptionToSubmit] = useState(null);
+
+  // Lab Test Types
+  const labTestTypes = [
+    {
+      id: '1',
+      name: 'Blood Test',
+      icon: 'water',
+      color: '#e74c3c',
+      description: 'Complete Blood Count & Analysis',
+    },
+    {
+      id: '2',
+      name: 'Urine Test',
+      icon: 'beaker',
+      color: '#f39c12',
+      description: 'Urinalysis & Kidney Function',
+    },
+    {
+      id: '3',
+      name: 'ECG Test',
+      icon: 'heart',
+      color: '#e91e63',
+      description: 'Electrocardiogram - Heart Analysis',
+    },
+    {
+      id: '4',
+      name: 'Vision Test',
+      icon: 'eye',
+      color: '#9c27b0',
+      description: 'Eye Evaluation & Prescription',
+    },
+    {
+      id: '5',
+      name: 'Stool Test',
+      icon: 'flask',
+      color: '#795548',
+      description: 'Stool Analysis & Parasites',
+    },
+  ];
 
   useEffect(() => {
     loadDoctorData();
@@ -200,6 +245,47 @@ const AddPrescription = () => {
         status: "active",
       };
 
+      // Store prescription and show lab test modal
+      setPrescriptionToSubmit(prescription);
+      setSelectedLabTests([]);
+      setShowNeedsLabModal(true);
+      setSubmitting(false);
+    } catch (error) {
+      console.error("Error preparing prescription:", error);
+      Alert.alert("Error", `Error: ${error.message}`);
+      setSubmitting(false);
+    }
+  };
+
+  const toggleLabTest = (testId) => {
+    setSelectedLabTests((prev) =>
+      prev.includes(testId) ? prev.filter((id) => id !== testId) : [...prev, testId]
+    );
+  };
+
+  const submitPrescriptionWithLabs = async () => {
+    if (!prescriptionToSubmit) return;
+
+    try {
+      setSubmitting(true);
+
+      // Add lab tests to prescription if any selected
+      const finalPrescription = {
+        ...prescriptionToSubmit,
+        requestedLabTests: selectedLabTests
+          .map((testId) => {
+            const test = labTestTypes.find((t) => t.id === testId);
+            return {
+              testId: test.id,
+              testName: test.name,
+              testDescription: test.description,
+              requestedDate: new Date().toISOString().split("T")[0],
+              status: "pending",
+            };
+          })
+          .filter((t) => t),
+      };
+
       // Save to Firebase
       const response = await fetch(
         `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/prescriptions.json`,
@@ -208,7 +294,7 @@ const AddPrescription = () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(prescription),
+          body: JSON.stringify(finalPrescription),
         }
       );
 
@@ -220,32 +306,40 @@ const AddPrescription = () => {
       console.log("Prescription saved with ID:", result.name);
 
       // Send prescription email to patient
-      await sendPrescriptionEmail(prescription);
+      await sendPrescriptionEmail(finalPrescription);
 
-      Alert.alert("Success", "Prescription added successfully!", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Reset form
-            setSelectedAppointment(null);
-            setDiagnosis("");
-            setSymptoms("");
-            setMedicines([
-              {
-                name: "",
-                dosage: "",
-                frequency: "",
-                duration: "",
-                instructions: "",
-              },
-            ]);
-            setAdvice("");
-            setNextVisit("");
-            setShowAppointmentList(true);
-            loadAppointments(); // Reload appointments
+      Alert.alert(
+        "Success",
+        `Prescription added successfully!${selectedLabTests.length > 0 ? " Lab tests requested." : ""}`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Reset form
+              setSelectedAppointment(null);
+              setDiagnosis("");
+              setSymptoms("");
+              setMedicines([
+                {
+                  name: "",
+                  dosage: "",
+                  frequency: "",
+                  duration: "",
+                  instructions: "",
+                },
+              ]);
+              setAdvice("");
+              setNextVisit("");
+              setShowAppointmentList(true);
+              setShowNeedsLabModal(false);
+              setShowLabTestModal(false);
+              setPrescriptionToSubmit(null);
+              setSelectedLabTests([]);
+              loadAppointments(); // Reload appointments
+            },
           },
-        },
-      ]);
+        ]
+      );
     } catch (error) {
       console.error("Error saving prescription:", error);
       Alert.alert("Error", `Failed to save prescription: ${error.message}`);
@@ -580,6 +674,169 @@ const AddPrescription = () => {
         <View style={{ height: 30 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Lab Test Need Modal */}
+      <Modal
+        visible={showNeedsLabModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => {
+          setShowNeedsLabModal(false);
+          setPrescriptionToSubmit(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.labModalContainer}>
+            <View style={styles.labModalHeader}>
+              <Text style={styles.labModalTitle}>Lab Tests Required?</Text>
+              <Text style={styles.labModalSubtitle}>
+                Does this patient need any lab tests?
+              </Text>
+            </View>
+
+            <View style={styles.labModalContent}>
+              <Ionicons name="flask" size={60} color="#4ECDC4" style={styles.labIcon} />
+              <Text style={styles.labModalQuestion}>
+                Do you want to request any lab tests for this patient?
+              </Text>
+            </View>
+
+            <View style={styles.labModalButtons}>
+              <TouchableOpacity
+                style={[styles.labModalButton, styles.skipButton]}
+                onPress={() => {
+                  setShowNeedsLabModal(false);
+                  submitPrescriptionWithLabs();
+                }}
+                disabled={submitting}
+              >
+                <Text style={styles.skipButtonText}>No, Skip</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.labModalButton, styles.addLabButton]}
+                onPress={() => {
+                  setShowNeedsLabModal(false);
+                  setShowLabTestModal(true);
+                }}
+                disabled={submitting}
+              >
+                <Text style={styles.addLabButtonText}>Yes, Add Tests</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Lab Test Selection Modal */}
+      <Modal
+        visible={showLabTestModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowLabTestModal(false)}
+      >
+        <SafeAreaView style={styles.container}>
+          <LinearGradient
+            colors={["#4ECDC4", "#44A08D"]}
+            style={styles.labHeader}
+          >
+            <TouchableOpacity
+              style={styles.labBackButton}
+              onPress={() => {
+                setShowLabTestModal(false);
+                setShowNeedsLabModal(true);
+              }}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.labHeaderTitle}>Select Lab Tests</Text>
+            <View style={{ width: 24 }} />
+          </LinearGradient>
+
+          <ScrollView
+            style={styles.labTestsContainer}
+            contentContainerStyle={styles.labTestsContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.labTestsInfo}>
+              Choose the lab tests required for this patient
+            </Text>
+
+            <View style={styles.labTestsGrid}>
+              {labTestTypes.map((test) => (
+                <TouchableOpacity
+                  key={test.id}
+                  style={[
+                    styles.labTestCard,
+                    selectedLabTests.includes(test.id) && styles.labTestCardSelected,
+                    { borderLeftColor: test.color },
+                  ]}
+                  onPress={() => toggleLabTest(test.id)}
+                >
+                  <View style={styles.labTestCardHeader}>
+                    <View
+                      style={[
+                        styles.labTestIcon,
+                        { backgroundColor: test.color },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={test.icon}
+                        size={24}
+                        color="white"
+                      />
+                    </View>
+                    <View style={styles.labTestCheckbox}>
+                      {selectedLabTests.includes(test.id) && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={24}
+                          color={test.color}
+                        />
+                      )}
+                    </View>
+                  </View>
+
+                  <Text style={styles.labTestName}>{test.name}</Text>
+                  <Text style={styles.labTestDescription}>{test.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.labTestsFooter}>
+              <Text style={styles.selectedLabsCount}>
+                {selectedLabTests.length} test{selectedLabTests.length !== 1 ? 's' : ''} selected
+              </Text>
+            </View>
+          </ScrollView>
+
+          <View style={styles.labActionButtons}>
+            <TouchableOpacity
+              style={[styles.labActionButton, styles.labCancelButton]}
+              onPress={() => {
+                setShowLabTestModal(false);
+                setShowNeedsLabModal(true);
+              }}
+              disabled={submitting}
+            >
+              <Text style={styles.labCancelButtonText}>Back</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.labActionButton, styles.labConfirmButton]}
+              onPress={() => {
+                setShowLabTestModal(false);
+                submitPrescriptionWithLabs();
+              }}
+              disabled={submitting}
+            >
+              <Text style={styles.labConfirmButtonText}>
+                {submitting ? "Saving..." : "Confirm & Save"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -804,6 +1061,209 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: "white",
     fontSize: 16,
+    fontWeight: "600",
+  },
+  // Lab Test Modals Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  labModalContainer: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    width: "85%",
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    alignItems: "center",
+  },
+  labModalHeader: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  labModalTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 8,
+  },
+  labModalSubtitle: {
+    fontSize: 14,
+    color: "#666",
+  },
+  labModalContent: {
+    alignItems: "center",
+    marginBottom: 30,
+  },
+  labIcon: {
+    marginBottom: 16,
+  },
+  labModalQuestion: {
+    fontSize: 16,
+    color: "#555",
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  labModalButtons: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  labModalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  skipButton: {
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  skipButtonText: {
+    color: "#666",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  addLabButton: {
+    backgroundColor: "#4ECDC4",
+  },
+  addLabButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  // Lab Test Selection Modal
+  labHeader: {
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  labBackButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  labHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "white",
+    flex: 1,
+    textAlign: "center",
+  },
+  labTestsContainer: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  labTestsContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 100,
+  },
+  labTestsInfo: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  labTestsGrid: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  labTestCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  labTestCardSelected: {
+    backgroundColor: "#f0fffe",
+    borderLeftWidth: 4,
+  },
+  labTestCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  labTestIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  labTestCheckbox: {
+    width: 24,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  labTestName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
+  labTestDescription: {
+    fontSize: 12,
+    color: "#999",
+    lineHeight: 16,
+  },
+  labTestsFooter: {
+    paddingTop: 16,
+    paddingBottom: 8,
+    alignItems: "center",
+  },
+  selectedLabsCount: {
+    fontSize: 14,
+    color: "#4ECDC4",
+    fontWeight: "600",
+  },
+  labActionButtons: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingBottom: 24,
+    backgroundColor: "white",
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  labActionButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  labCancelButton: {
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  labCancelButtonText: {
+    color: "#666",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  labConfirmButton: {
+    backgroundColor: "#4ECDC4",
+  },
+  labConfirmButtonText: {
+    color: "white",
+    fontSize: 14,
     fontWeight: "600",
   },
 });

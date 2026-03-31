@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,19 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  StatusBar
+  StatusBar,
+  FlatList,
+  Modal,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 let LinearGradient;
 try {
@@ -25,6 +33,29 @@ try {
 
 const PharmacyDashboard = () => {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState('orders');
+  const [selectedLabType, setSelectedLabType] = useState(null);
+  const [selectedLabOrder, setSelectedLabOrder] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orderDetailModalVisible, setOrderDetailModalVisible] = useState(false);
+
+  // Real-time Orders States
+  const [ordersData, setOrdersData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pharmacyId, setPharmacyId] = useState(null);
+
+  // Delivery States
+  const [deliveryOrders, setDeliveryOrders] = useState([]);
+  const [selectedDeliveryOrder, setSelectedDeliveryOrder] = useState(null);
+  const [deliveryModalVisible, setDeliveryModalVisible] = useState(false);
+
+  // Lab Test Orders States
+  const [labTestOrders, setLabTestOrders] = useState([]);
+  const [filteredLabOrders, setFilteredLabOrders] = useState([]);
+  const [labModalVisible, setLabModalVisible] = useState(false);
+  const [uploadingReport, setUploadingReport] = useState(false);
+  const [selectedReportImage, setSelectedReportImage] = useState(null);
 
   const logout = async () => {
     try {
@@ -35,24 +66,1494 @@ const PharmacyDashboard = () => {
     }
   };
 
-  const pharmacyMenuItems = [
-    { id: 1, title: 'Inventory', icon: 'cube', color: '#f093fb' },
-    { id: 2, title: 'Prescriptions', icon: 'document-attach', color: '#f5576c' },
-    { id: 3, title: 'Billing', icon: 'card', color: '#e74c3c' },
-    { id: 4, title: 'Orders', icon: 'bag', color: '#c0392b' },
-    { id: 5, title: 'Customers', icon: 'people', color: '#a93226' },
-    { id: 6, title: 'Reports', icon: 'analytics', color: '#922b21' },
+  // Fetch orders from Firebase
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/medicine-orders.json'
+      );
+      const data = await response.json();
+
+      if (data) {
+        let orders = Object.entries(data)
+          .map(([key, order]) => ({
+            id: key,
+            ...order,
+          }))
+          .filter((order) => order.orderStatus === 'pending' || order.orderStatus === 'confirmed')
+          .sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
+
+        setOrdersData(orders);
+      } else {
+        setOrdersData([]);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading orders:', error);
+      setOrdersData([]);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  // Refresh when tab is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      if (activeTab === 'orders') {
+        loadOrders();
+      } else if (activeTab === 'delivery') {
+        loadDeliveryOrders();
+      } else if (activeTab === 'labs') {
+        loadLabTestOrders();
+      }
+    }, [activeTab])
+  );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadOrders();
+    setRefreshing(false);
+  };
+
+  // Load Delivery Orders
+  const loadDeliveryOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/delivery-orders.json'
+      );
+      const data = await response.json();
+
+      if (data) {
+        let orders = Object.entries(data)
+          .map(([key, order]) => ({
+            id: key,
+            ...order,
+          }))
+          .filter((order) => order.deliveryStatus !== 'delivered')
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        setDeliveryOrders(orders);
+      } else {
+        setDeliveryOrders([]);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading delivery orders:', error);
+      setDeliveryOrders([]);
+      setLoading(false);
+    }
+  };
+
+  // Update Delivery Status
+  const updateDeliveryStatus = async (deliveryOrderId, newStatus) => {
+    try {
+      const response = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/delivery-orders/${deliveryOrderId}.json`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            deliveryStatus: newStatus,
+            lastUpdated: new Date().toISOString(),
+          }),
+        }
+      );
+
+      if (response.ok) {
+        Alert.alert('Success', `Delivery status updated to ${newStatus}!`);
+        setDeliveryModalVisible(false);
+        await loadDeliveryOrders();
+      } else {
+        Alert.alert('Error', 'Failed to update delivery status');
+      }
+    } catch (error) {
+      console.error('Error updating delivery status:', error);
+      Alert.alert('Error', 'Failed to update delivery status.');
+    }
+  };
+
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const response = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/medicine-orders/${orderId}.json`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            orderStatus: newStatus,
+            pharmacyStatus: newStatus === 'cancelled' ? 'rejected' : 'confirmed',
+            lastUpdated: new Date().toISOString(),
+          }),
+        }
+      );
+
+      if (response.ok) {
+        // If status is processing, also add to delivery orders
+        if (newStatus === 'processing') {
+          await saveToDeliveryOrders(selectedOrder || orderId);
+        }
+        Alert.alert('Success', `Order status updated to ${newStatus}!`);
+        setOrderDetailModalVisible(false);
+        await loadOrders();
+      } else {
+        Alert.alert('Error', 'Failed to update order status');
+      }
+    } catch (error) {
+      console.error('Error updating order:', error);
+      Alert.alert('Error', 'Failed to update order status.');
+    }
+  };
+
+  const saveToDeliveryOrders = async (order) => {
+    try {
+      const deliveryData = {
+        orderId: order.id,
+        patientName: order.patientName,
+        phoneNumber: order.phoneNumber,
+        deliveryAddress: order.deliveryAddress,
+        medicines: order.medicines,
+        totalAmount: order.totalAmount,
+        orderDate: order.orderDate,
+        orderStatus: 'processing',
+        deliveryStatus: 'ready_for_pickup',
+        createdAt: new Date().toISOString(),
+      };
+
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/delivery-orders.json',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(deliveryData),
+        }
+      );
+
+      if (response.ok) {
+        console.log('Order saved to delivery section');
+      }
+    } catch (error) {
+      console.error('Error saving to delivery orders:', error);
+    }
+  };
+
+  // Load Lab Test Orders
+  const loadLabTestOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json'
+      );
+      const data = await response.json();
+
+      if (data) {
+        let orders = Object.entries(data)
+          .map(([key, order]) => ({
+            id: key,
+            ...order,
+          }))
+          .filter((order) => order.orderStatus === 'pending' || order.orderStatus === 'sample-collected')
+          .sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
+
+        setLabTestOrders(orders);
+        setFilteredLabOrders(orders);
+      } else {
+        setLabTestOrders([]);
+        setFilteredLabOrders([]);
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading lab test orders:', error);
+      setLabTestOrders([]);
+      setFilteredLabOrders([]);
+      setLoading(false);
+    }
+  };
+
+  // Update Lab Test Order
+  const updateLabTestOrder = async (labOrderId, updates) => {
+    try {
+      const response = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders/${labOrderId}.json`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...updates,
+            lastUpdated: new Date().toISOString(),
+          }),
+        }
+      );
+
+      if (response.ok) {
+        Alert.alert('Success', 'Lab test order updated!');
+        setSelectedLabOrder(null);
+        await loadLabTestOrders();
+      } else {
+        Alert.alert('Error', 'Failed to update lab test order');
+      }
+    } catch (error) {
+      console.error('Error updating lab test order:', error);
+      Alert.alert('Error', 'Failed to update lab test order.');
+    }
+  };
+
+  const pickReportImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setSelectedReportImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const convertImageToBase64 = async (imageUri) => {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return base64;
+    } catch (error) {
+      console.error('Error converting image to base64:', error);
+      throw error;
+    }
+  };
+
+  const uploadLabReport = async () => {
+    if (!selectedReportImage || !selectedLabOrder) {
+      Alert.alert('Error', 'Please select an image first');
+      return;
+    }
+
+    setUploadingReport(true);
+    try {
+      // Convert image to base64
+      const base64Image = await convertImageToBase64(selectedReportImage.uri);
+      
+      // Create report object
+      const reportData = {
+        reportImage: base64Image,
+        reportFileName: selectedReportImage.filename || 'report.jpg',
+        reportMimeType: selectedReportImage.mimeType || 'image/jpeg',
+        reportUploadedDate: new Date().toISOString().split('T')[0],
+        reportUploadedTime: new Date().toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit',
+          hour12: true 
+        }),
+        reportStatus: 'uploaded',
+        uploadedByPharmacy: true,
+        // Patient info
+        patientName: selectedLabOrder.patientName,
+        patientEmail: selectedLabOrder.patientEmail,
+        patientPhone: selectedLabOrder.patientPhone,
+        // Doctor info
+        doctorName: selectedLabOrder.doctorName,
+        doctorEmail: selectedLabOrder.doctorEmail || 'doctor@medical.com',
+        doctorSpecialty: selectedLabOrder.doctorSpecialty,
+        // Lab order info
+        labOrderId: selectedLabOrder.id,
+        prescriptionId: selectedLabOrder.prescriptionId,
+        prescriptionNumber: selectedLabOrder.prescriptionNumber,
+        diagnosis: selectedLabOrder.diagnosis,
+        testsList: selectedLabOrder.requestedTests?.map(t => t.testName).join(', ') || 'Lab Tests',
+      };
+
+      // Update lab order with report
+      const response = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders/${selectedLabOrder.id}.json`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(reportData),
+        }
+      );
+
+      if (response.ok) {
+        Alert.alert('Success', 'Lab report uploaded successfully!');
+        setSelectedReportImage(null);
+        setLabModalVisible(false);
+        await loadLabTestOrders();
+      } else {
+        Alert.alert('Error', 'Failed to upload lab report');
+      }
+    } catch (error) {
+      console.error('Error uploading report:', error);
+      Alert.alert('Error', 'Failed to upload lab report: ' + error.message);
+    } finally {
+      setUploadingReport(false);
+    }
+  };
+
+  const handleApproveOrder = (order) => {
+    setSelectedOrder(order);
+    setOrderDetailModalVisible(true);
+  };
+
+  const handleRejectOrder = (orderId) => {
+    Alert.alert(
+      'Confirm',
+      'Do you want to reject this order?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          onPress: () => updateOrderStatus(orderId, 'cancelled'),
+        },
+      ]
+    );
+  };
+
+  const handleApproveFromModal = () => {
+    if (selectedOrder) {
+      Alert.alert(
+        'Approve Order',
+        'This order will be sent to delivery for processing. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Approve',
+            onPress: () => updateOrderStatus(selectedOrder.id, 'processing'),
+          },
+        ]
+      );
+    }
+  };
+
+  // Delivery Handlers
+  const handleSelectDeliveryOrder = (order) => {
+    setSelectedDeliveryOrder(order);
+    setDeliveryModalVisible(true);
+  };
+
+  const handleAssignToDeliveryBoy = (order) => {
+    Alert.alert(
+      'Assign Order',
+      'Assign this order to delivery boy for pickup?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Assign',
+          onPress: () => updateDeliveryStatus(order.id, 'assigned'),
+        },
+      ]
+    );
+  };
+
+  const handleMarkAsPickedUp = (order) => {
+    Alert.alert(
+      'Picked Up',
+      'Mark this order as picked up by delivery boy?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => updateDeliveryStatus(order.id, 'picked_up'),
+        },
+      ]
+    );
+  };
+
+  const handleMarkAsShipped = (order) => {
+    Alert.alert(
+      'Mark as In Transit',
+      'Order is now out for delivery?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => updateDeliveryStatus(order.id, 'in_transit'),
+        },
+      ]
+    );
+  };
+
+  const handleMarkAsDelivered = (order) => {
+    Alert.alert(
+      'Mark as Delivered',
+      'Order delivered successfully?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: () => updateDeliveryStatus(order.id, 'delivered'),
+        },
+      ]
+    );
+  };
+
+  // Lab Test Types
+  const labTestTypes = [
+    {
+      id: '1',
+      name: 'Blood Test',
+      icon: 'water',
+      color: '#e74c3c',
+      description: 'Complete Blood Count & Analysis',
+    },
+    {
+      id: '2',
+      name: 'Urine Test',
+      icon: 'beaker',
+      color: '#f39c12',
+      description: 'Urinalysis & Kidney Function',
+    },
+    {
+      id: '3',
+      name: 'ECG Test',
+      icon: 'heart',
+      color: '#e91e63',
+      description: 'Electrocardiogram - Heart Analysis',
+    },
+    {
+      id: '4',
+      name: 'Vision Test',
+      icon: 'eye',
+      color: '#9c27b0',
+      description: 'Eye Evaluation & Prescription',
+    },
+    {
+      id: '5',
+      name: 'Stool Test',
+      icon: 'flask',
+      color: '#795548',
+      description: 'Stool Analysis & Parasites',
+    },
   ];
+
+  // Dummy Lab Orders Data for each test type
+  const labOrdersData = {
+    '1': [
+      {
+        id: 'LAB-001',
+        patientName: 'Neha Sharma',
+        testType: 'Blood Test',
+        status: 'Pending',
+        date: '2026-03-31',
+        phone: '+91 9876543213',
+        doctorName: 'Dr. Vikram Sharma',
+      },
+      {
+        id: 'LAB-002',
+        patientName: 'Rohan Verma',
+        testType: 'Blood Test',
+        status: 'Completed',
+        date: '2026-03-30',
+        phone: '+91 9876543214',
+        doctorName: 'Dr. Anjali Gupta',
+      },
+    ],
+    '2': [
+      {
+        id: 'LAB-003',
+        patientName: 'Divya Nair',
+        testType: 'Urine Test',
+        status: 'Pending',
+        date: '2026-03-31',
+        phone: '+91 9876543215',
+        doctorName: 'Dr. Ramesh Kumar',
+      },
+    ],
+    '3': [
+      {
+        id: 'LAB-004',
+        patientName: 'Suresh Singh',
+        testType: 'ECG Test',
+        status: 'Pending',
+        date: '2026-03-31',
+        phone: '+91 9876543216',
+        doctorName: 'Dr. Priya Kapoor',
+      },
+      {
+        id: 'LAB-005',
+        patientName: 'Meera Rao',
+        testType: 'ECG Test',
+        status: 'Completed',
+        date: '2026-03-29',
+        phone: '+91 9876543217',
+        doctorName: 'Dr. Vikram Sharma',
+      },
+    ],
+    '4': [
+      {
+        id: 'LAB-006',
+        patientName: 'Arun Kumar',
+        testType: 'Vision Test',
+        status: 'Pending',
+        date: '2026-03-31',
+        phone: '+91 9876543218',
+        doctorName: 'Dr. Deepak Patel',
+      },
+    ],
+    '5': [
+      {
+        id: 'LAB-007',
+        patientName: 'Kavya Singh',
+        testType: 'Stool Test',
+        status: 'Pending',
+        date: '2026-03-31',
+        phone: '+91 9876543219',
+        doctorName: 'Dr. Anjali Gupta',
+      },
+      {
+        id: 'LAB-008',
+        patientName: 'Vishal Kumar',
+        testType: 'Stool Test',
+        status: 'Completed',
+        date: '2026-03-28',
+        phone: '+91 9876543220',
+        doctorName: 'Dr. Ramesh Kumar',
+      },
+    ],
+  };
+
+  const handleAcceptLabOrder = (labOrderId) => {
+    Alert.alert('Lab Order Accepted', `Lab order ${labOrderId} accepted. Patient will be contacted for test.`);
+  };
+
+  const handleRejectLabOrder = (labOrderId) => {
+    Alert.alert('Lab Order Rejected', `Lab order ${labOrderId} has been rejected.`);
+  };
+
+  const handleSendReport = (labOrderId, patientName, doctorName) => {
+    Alert.alert(
+      'Report Sent',
+      `Lab report for ${patientName} has been sent to Dr. ${doctorName}!`
+    );
+  };
+
+  // Order Card Component
+  const OrderCard = ({ item }) => {
+    const getStatusColor = (status) => {
+      switch (status) {
+        case 'pending':
+          return '#fff3cd';
+        case 'confirmed':
+          return '#d4edda';
+        case 'processing':
+          return '#cfe2ff';
+        case 'cancelled':
+          return '#f8d7da';
+        default:
+          return '#e2e3e5';
+      }
+    };
+
+    const getStatusTextColor = (status) => {
+      switch (status) {
+        case 'pending':
+          return '#856404';
+        case 'confirmed':
+          return '#155724';
+        case 'processing':
+          return '#084298';
+        case 'cancelled':
+          return '#842029';
+        default:
+          return '#383d41';
+      }
+    };
+
+    const formatPrice = (price) => {
+      return `₹${parseFloat(price || 0).toFixed(2)}`;
+    };
+
+    const formatDate = (dateString) => {
+      try {
+        return new Date(dateString).toLocaleDateString('en-IN');
+      } catch {
+        return dateString;
+      }
+    };
+
+    return (
+      <TouchableOpacity
+        onPress={() => handleApproveOrder(item)}
+        style={styles.orderCard}
+      >
+        <View style={styles.orderHeader}>
+          <View>
+            <Text style={styles.orderIdText}>{item.orderId || `ORD-${item.id?.substring(0, 6)}`}</Text>
+            <Text style={styles.patientNameText}>{item.patientName || 'Patient'}</Text>
+          </View>
+          <View
+            style={[
+              styles.statusBadge,
+              {
+                backgroundColor: getStatusColor(item.orderStatus),
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusText,
+                {
+                  color: getStatusTextColor(item.orderStatus),
+                },
+              ]}
+            >
+              {item.orderStatus?.charAt(0).toUpperCase() + item.orderStatus?.slice(1) || 'Pending'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.itemsText} numberOfLines={2}>
+          {item.medicines && Array.isArray(item.medicines)
+            ? item.medicines.map((m) => `${m.name} (${m.quantity})`).join(', ')
+            : item.medicinesList || 'Medicines'}
+        </Text>
+        <Text style={styles.amountText}>{formatPrice(item.totalAmount || item.amount)}</Text>
+        <View style={styles.infoRow}>
+          <Ionicons name="call-outline" size={14} color="#666" />
+          <Text style={styles.phoneText}>{item.phoneNumber || item.phone || 'N/A'}</Text>
+        </View>
+        <Text style={styles.dateText}>📅 {formatDate(item.orderDate || item.date)}</Text>
+
+        {(item.orderStatus === 'pending' || item.orderStatus === 'confirming') && (
+          <TouchableOpacity
+            onPress={() => handleRejectOrder(item.id)}
+            style={[styles.button, styles.rejectButton]}
+          >
+            <Ionicons name="close" size={18} color="white" />
+            <Text style={styles.buttonText}>Reject</Text>
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  // Delivery Order Card Component
+  const DeliveryOrderCard = ({ item }) => {
+    const getDeliveryStatusColor = (status) => {
+      switch (status) {
+        case 'ready_for_pickup':
+          return '#fff3cd';
+        case 'assigned':
+          return '#cfe2ff';
+        case 'picked_up':
+          return '#d1ecf1';
+        case 'in_transit':
+          return '#d4edda';
+        case 'delivered':
+          return '#d4edda';
+        default:
+          return '#e2e3e5';
+      }
+    };
+
+    const getDeliveryStatusTextColor = (status) => {
+      switch (status) {
+        case 'ready_for_pickup':
+          return '#856404';
+        case 'assigned':
+          return '#084298';
+        case 'picked_up':
+          return '#055160';
+        case 'in_transit':
+          return '#0a3622';
+        case 'delivered':
+          return '#155724';
+        default:
+          return '#383d41';
+      }
+    };
+
+    const getStatusLabel = (status) => {
+      switch (status) {
+        case 'ready_for_pickup':
+          return 'Ready for Pickup';
+        case 'assigned':
+          return 'Assigned';
+        case 'picked_up':
+          return 'Picked Up';
+        case 'in_transit':
+          return 'In Transit';
+        case 'delivered':
+          return 'Delivered';
+        default:
+          return status?.replace(/_/g, ' ').toUpperCase();
+      }
+    };
+
+    const formatPrice = (price) => {
+      return `₹${parseFloat(price || 0).toFixed(2)}`;
+    };
+
+    return (
+      <TouchableOpacity
+        onPress={() => handleSelectDeliveryOrder(item)}
+        style={styles.deliveryOrderCard}
+      >
+        <View style={styles.deliveryOrderHeader}>
+          <View>
+            <Text style={styles.deliveryOrderIdText}>{item.orderId || `DEL-${item.id?.substring(0, 6)}`}</Text>
+            <Text style={styles.deliveryPatientName}>{item.patientName || 'Patient'}</Text>
+          </View>
+          <View
+            style={[
+              styles.deliveryStatusBadge,
+              { backgroundColor: getDeliveryStatusColor(item.deliveryStatus) },
+            ]}
+          >
+            <Text
+              style={[
+                styles.deliveryStatusText,
+                { color: getDeliveryStatusTextColor(item.deliveryStatus) },
+              ]}
+            >
+              {getStatusLabel(item.deliveryStatus)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.deliveryInfoRow}>
+          <Ionicons name="location" size={14} color="#666" />
+          <Text style={styles.deliveryInfoText}>{item.deliveryAddress || 'N/A'}</Text>
+        </View>
+
+        <View style={styles.deliveryInfoRow}>
+          <Ionicons name="call-outline" size={14} color="#666" />
+          <Text style={styles.deliveryInfoText}>{item.phoneNumber || 'N/A'}</Text>
+        </View>
+
+        <Text style={styles.deliveryAmountText}>{formatPrice(item.totalAmount || 0)}</Text>
+
+        <View style={styles.deliveryMedicinesPreview}>
+          <Text style={styles.medicinesLabel}>Items:</Text>
+          <Text style={styles.medicinesText} numberOfLines={1}>
+            {item.medicines && Array.isArray(item.medicines)
+              ? item.medicines.map((m) => m.name).join(', ')
+              : 'Medicines'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  // Lab Order Card Component
+  const LabOrderCard = ({ item }) => (
+    <View style={styles.labOrderCard}>
+      <View style={styles.labOrderHeader}>
+        <View>
+          <Text style={styles.labOrderIdText}>{item.id}</Text>
+          <Text style={styles.patientNameText}>{item.patientName}</Text>
+        </View>
+        <View
+          style={[
+            styles.statusBadge,
+            {
+              backgroundColor:
+                item.status === 'Pending' ? '#fff3cd' : '#d4edda',
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              {
+                color: item.status === 'Pending' ? '#856404' : '#155724',
+              },
+            ]}
+          >
+            {item.status}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.labInfoRow}>
+        <Ionicons name="person-outline" size={16} color="#666" />
+        <Text style={styles.labInfoText}>Doctor: {item.doctorName}</Text>
+      </View>
+      <View style={styles.labInfoRow}>
+        <Ionicons name="call-outline" size={16} color="#666" />
+        <Text style={styles.labInfoText}>{item.phone}</Text>
+      </View>
+      <Text style={styles.labDateText}>📅 {item.date}</Text>
+
+      {item.status === 'Pending' && (
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.button, styles.approveButton]}
+            onPress={() => handleAcceptLabOrder(item.id)}
+          >
+            <Ionicons name="checkmark" size={18} color="white" />
+            <Text style={styles.buttonText}>Accept</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, styles.rejectButton]}
+            onPress={() => handleRejectLabOrder(item.id)}
+          >
+            <Ionicons name="close" size={18} color="white" />
+            <Text style={styles.buttonText}>Reject</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {item.status === 'Completed' && (
+        <TouchableOpacity
+          style={[styles.button, styles.sendReportButton]}
+          onPress={() =>
+            handleSendReport(item.id, item.patientName, item.doctorName)
+          }
+        >
+          <Ionicons name="send" size={18} color="white" />
+          <Text style={styles.buttonText}>Send Report to Doctor</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  // Detailed Order Modal Component
+  const OrderDetailModal = () => (
+    <Modal
+      visible={orderDetailModalVisible}
+      animationType="slide"
+      onRequestClose={() => setOrderDetailModalVisible(false)}
+    >
+      <SafeAreaView style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={() => setOrderDetailModalVisible(false)}>
+            <Ionicons name="arrow-back" size={24} color="#f093fb" />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Order Details</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <ScrollView style={styles.modalContent}>
+          {selectedOrder && (
+            <>
+              {/* Order Header Section */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Order Information</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Order ID:</Text>
+                  <Text style={styles.detailValue}>
+                    {selectedOrder.orderId || `ORD-${selectedOrder.id?.substring(0, 6)}`}
+                  </Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Order Date:</Text>
+                  <Text style={styles.detailValue}>
+                    {new Date(selectedOrder.orderDate).toLocaleDateString('en-IN')}
+                  </Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Status:</Text>
+                  <Text
+                    style={[
+                      styles.detailValue,
+                      {
+                        color:
+                          selectedOrder.orderStatus === 'pending'
+                            ? '#ff9800'
+                            : selectedOrder.orderStatus === 'confirmed'
+                            ? '#4caf50'
+                            : '#2196f3',
+                      },
+                    ]}
+                  >
+                    {selectedOrder.orderStatus?.toUpperCase() || 'PENDING'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Patient Information */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Patient Information</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Patient Name:</Text>
+                  <Text style={styles.detailValue}>{selectedOrder.patientName || 'N/A'}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Phone:</Text>
+                  <Text style={styles.detailValue}>{selectedOrder.phoneNumber || 'N/A'}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Address:</Text>
+                  <Text style={styles.detailValue}>{selectedOrder.deliveryAddress || 'N/A'}</Text>
+                </View>
+              </View>
+
+              {/* Medicines/Prescriptions */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Prescribed Medicines</Text>
+                {selectedOrder.medicines && Array.isArray(selectedOrder.medicines) ? (
+                  selectedOrder.medicines.map((medicine, index) => (
+                    <View key={index} style={styles.medicineItem}>
+                      <View style={styles.medicineNameRow}>
+                        <Text style={styles.medicineName}>{medicine.name}</Text>
+                        <Text style={styles.medicineQty}>
+                          Qty: {medicine.quantity} {medicine.unit || 'units'}
+                        </Text>
+                      </View>
+                      {medicine.dosage && (
+                        <Text style={styles.medicineDosage}>Dosage: {medicine.dosage}</Text>
+                      )}
+                      {medicine.frequency && (
+                        <Text style={styles.medicineFrequency}>Frequency: {medicine.frequency}</Text>
+                      )}
+                      {medicine.price && (
+                        <Text style={styles.medicinePrice}>₹{medicine.price}</Text>
+                      )}
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.noData}>No medicines listed</Text>
+                )}
+              </View>
+
+              {/* Price Summary */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Price Summary</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Total Amount:</Text>
+                  <Text style={[styles.detailValue, styles.totalAmount]}>
+                    ₹{parseFloat(selectedOrder.totalAmount || 0).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Action Buttons */}
+              {(selectedOrder.orderStatus === 'pending' || selectedOrder.orderStatus === 'confirmed') && (
+                <View style={styles.actionButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.approveActionButton]}
+                    onPress={handleApproveFromModal}
+                  >
+                    <Ionicons name="checkmark-circle" size={20} color="white" />
+                    <Text style={styles.actionButtonText}>Approve & Send to Delivery</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.rejectActionButton]}
+                    onPress={() => {
+                      handleRejectOrder(selectedOrder.id);
+                      setOrderDetailModalVisible(false);
+                    }}
+                  >
+                    <Ionicons name="close-circle" size={20} color="white" />
+                    <Text style={styles.actionButtonText}>Reject Order</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+
+  // Delivery Detail Modal
+  const DeliveryDetailModal = () => {
+    const getStatusLabel = (status) => {
+      switch (status) {
+        case 'ready_for_pickup':
+          return 'Ready for Pickup';
+        case 'assigned':
+          return 'Assigned to Delivery Boy';
+        case 'picked_up':
+          return 'Picked Up from Pharmacy';
+        case 'in_transit':
+          return 'In Transit';
+        case 'delivered':
+          return 'Delivered Successfully';
+        default:
+          return status?.replace(/_/g, ' ').toUpperCase();
+      }
+    };
+
+    return (
+      <Modal
+        visible={deliveryModalVisible}
+        animationType="slide"
+        onRequestClose={() => setDeliveryModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setDeliveryModalVisible(false)}>
+              <Ionicons name="arrow-back" size={24} color="#f093fb" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Delivery Details</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {selectedDeliveryOrder && (
+              <>
+                {/* Delivery Status */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Delivery Status</Text>
+                  <View style={styles.statusProgressContainer}>
+                    <View style={styles.statusStep}>
+                      <View
+                        style={[
+                          styles.statusDot,
+                          {
+                            backgroundColor:
+                              selectedDeliveryOrder.deliveryStatus !== 'ready_for_pickup'
+                                ? '#27ae60'
+                                : '#ccc',
+                          },
+                        ]}
+                      >
+                        <Ionicons name="checkmark" size={12} color="white" />
+                      </View>
+                      <Text style={styles.statusStepLabel}>Ready</Text>
+                    </View>
+
+                    <View style={styles.statusLine} />
+
+                    <View style={styles.statusStep}>
+                      <View
+                        style={[
+                          styles.statusDot,
+                          {
+                            backgroundColor:
+                              selectedDeliveryOrder.deliveryStatus !== 'ready_for_pickup' &&
+                              selectedDeliveryOrder.deliveryStatus !== 'assigned'
+                                ? '#27ae60'
+                                : '#ccc',
+                          },
+                        ]}
+                      >
+                        <Ionicons name="checkmark" size={12} color="white" />
+                      </View>
+                      <Text style={styles.statusStepLabel}>Assigned</Text>
+                    </View>
+
+                    <View style={styles.statusLine} />
+
+                    <View style={styles.statusStep}>
+                      <View
+                        style={[
+                          styles.statusDot,
+                          {
+                            backgroundColor:
+                              selectedDeliveryOrder.deliveryStatus === 'in_transit' ||
+                              selectedDeliveryOrder.deliveryStatus === 'delivered'
+                                ? '#27ae60'
+                                : '#ccc',
+                          },
+                        ]}
+                      >
+                        <Ionicons name="checkmark" size={12} color="white" />
+                      </View>
+                      <Text style={styles.statusStepLabel}>In Transit</Text>
+                    </View>
+
+                    <View style={styles.statusLine} />
+
+                    <View style={styles.statusStep}>
+                      <View
+                        style={[
+                          styles.statusDot,
+                          {
+                            backgroundColor:
+                              selectedDeliveryOrder.deliveryStatus === 'delivered'
+                                ? '#27ae60'
+                                : '#ccc',
+                          },
+                        ]}
+                      >
+                        <Ionicons name="checkmark" size={12} color="white" />
+                      </View>
+                      <Text style={styles.statusStepLabel}>Delivered</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Order Details */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Order Information</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Order ID:</Text>
+                    <Text style={styles.detailValue}>
+                      {selectedDeliveryOrder.orderId || `DEL-${selectedDeliveryOrder.id?.substring(0, 6)}`}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Status:</Text>
+                    <Text style={[styles.detailValue, { color: '#27ae60' }]}>
+                      {getStatusLabel(selectedDeliveryOrder.deliveryStatus)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Customer Details */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Customer Information</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Patient Name:</Text>
+                    <Text style={styles.detailValue}>{selectedDeliveryOrder.patientName || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Phone:</Text>
+                    <Text style={styles.detailValue}>{selectedDeliveryOrder.phoneNumber || 'N/A'}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Address:</Text>
+                    <Text style={[styles.detailValue, { flexWrap: 'wrap' }]}>
+                      {selectedDeliveryOrder.deliveryAddress || 'N/A'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Order Items */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Items</Text>
+                  {selectedDeliveryOrder.medicines && Array.isArray(selectedDeliveryOrder.medicines) ? (
+                    selectedDeliveryOrder.medicines.map((medicine, index) => (
+                      <View key={index} style={styles.medicineItem}>
+                        <Text style={styles.medicineName}>{medicine.name}</Text>
+                        <Text style={styles.medicineQty}>
+                          Qty: {medicine.quantity} {medicine.unit || 'units'}
+                        </Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.noData}>No items listed</Text>
+                  )}
+                </View>
+
+                {/* Amount */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Amount</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Total:</Text>
+                    <Text style={[styles.detailValue, styles.totalAmount]}>
+                      ₹{parseFloat(selectedDeliveryOrder.totalAmount || 0).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Action Buttons */}
+                <View style={styles.actionButtonsContainer}>
+                  {selectedDeliveryOrder.deliveryStatus === 'ready_for_pickup' && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.assignButton]}
+                      onPress={() => {
+                        handleAssignToDeliveryBoy(selectedDeliveryOrder);
+                      }}
+                    >
+                      <Ionicons name="person-add" size={20} color="white" />
+                      <Text style={styles.actionButtonText}>Assign to Delivery Boy</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {selectedDeliveryOrder.deliveryStatus === 'assigned' && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.pickupButton]}
+                      onPress={() => {
+                        handleMarkAsPickedUp(selectedDeliveryOrder);
+                      }}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color="white" />
+                      <Text style={styles.actionButtonText}>Mark as Picked Up</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {selectedDeliveryOrder.deliveryStatus === 'picked_up' && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.transitButton]}
+                      onPress={() => {
+                        handleMarkAsShipped(selectedDeliveryOrder);
+                      }}
+                    >
+                      <Ionicons name="bicycle" size={20} color="white" />
+                      <Text style={styles.actionButtonText}>Out for Delivery</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {selectedDeliveryOrder.deliveryStatus === 'in_transit' && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.deliveredButton]}
+                      onPress={() => {
+                        handleMarkAsDelivered(selectedDeliveryOrder);
+                      }}
+                    >
+                      <Ionicons name="home" size={20} color="white" />
+                      <Text style={styles.actionButtonText}>Mark as Delivered</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    );
+  };
+
+  const LabDetailModal = () => {
+    return (
+      <Modal
+        visible={labModalVisible}
+        animationType="slide"
+        onRequestClose={() => setLabModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setLabModalVisible(false)}>
+              <Ionicons name="arrow-back" size={24} color="#f093fb" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Lab Test Order Details</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {selectedLabOrder && (
+              <>
+                {/* Patient Information */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Patient Information</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Name:</Text>
+                    <Text style={styles.detailValue}>{selectedLabOrder.patientName}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Email:</Text>
+                    <Text style={[styles.detailValue, { fontSize: 12 }]}>
+                      {selectedLabOrder.patientEmail}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Phone:</Text>
+                    <Text style={styles.detailValue}>{selectedLabOrder.patientPhone}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Address:</Text>
+                    <Text style={[styles.detailValue, { flexWrap: 'wrap' }]}>
+                      {selectedLabOrder.deliveryAddress}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Doctor Information */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Doctor Information</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Doctor:</Text>
+                    <Text style={styles.detailValue}>{selectedLabOrder.doctorName}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Specialty:</Text>
+                    <Text style={styles.detailValue}>{selectedLabOrder.doctorSpecialty}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Diagnosis:</Text>
+                    <Text style={[styles.detailValue, { flexWrap: 'wrap' }]}>
+                      {selectedLabOrder.diagnosis}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Order Information */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Order Information</Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Order ID:</Text>
+                    <Text style={styles.detailValue}>
+                      {selectedLabOrder.prescriptionNumber || `LAB-${selectedLabOrder.id?.substring(0, 6)}`}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Order Date:</Text>
+                    <Text style={styles.detailValue}>{selectedLabOrder.orderDate}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Order Time:</Text>
+                    <Text style={styles.detailValue}>{selectedLabOrder.orderTime}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Status:</Text>
+                    <Text style={[styles.detailValue, { 
+                      color: selectedLabOrder.sampleCollected ? '#27ae60' : '#f093fb'
+                    }]}>
+                      {selectedLabOrder.sampleCollected ? 'Sample Collected' : 'Pending'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Requested Tests */}
+                <View style={styles.detailSection}>
+                  <Text style={styles.detailSectionTitle}>Requested Tests</Text>
+                  {selectedLabOrder.requestedTests && selectedLabOrder.requestedTests.length > 0 ? (
+                    selectedLabOrder.requestedTests.map((test, index) => (
+                      <View key={index} style={styles.medicineItem}>
+                        <View style={styles.medicineNameRow}>
+                          <Text style={styles.medicineName}>{test.testName}</Text>
+                          <View style={[
+                            styles.statusBadge,
+                            { 
+                              backgroundColor: test.status === 'completed' ? '#27ae60' :
+                                              test.status === 'in-progress' ? '#f39c12' :
+                                              '#e74c3c'
+                            }
+                          ]}>
+                            <Text style={styles.statusText}>{test.status || 'pending'}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.medicineQty}>{test.testDescription}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.noData}>No tests listed</Text>
+                  )}
+                </View>
+
+                {/* Sample Collection Status */}
+                {!selectedLabOrder.sampleCollected && (
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Sample Collection</Text>
+                    <Text style={styles.medicineQty}>
+                      Sample collection scheduled for home delivery. Please collect and mark as sampled below.
+                    </Text>
+                  </View>
+                )}
+
+                {/* Report Section */}
+                {selectedLabOrder.sampleCollected && (
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Lab Report</Text>
+                    
+                    {selectedLabOrder.reportStatus === 'uploaded' ? (
+                      <View>
+                        <View style={[styles.statusBadge, { backgroundColor: '#d4edda', marginBottom: 15 }]}>
+                          <Text style={[styles.statusText, { color: '#27ae60' }]}>✓ Report Uploaded</Text>
+                        </View>
+                        <Text style={styles.medicineQty}>
+                          Report uploaded on {selectedLabOrder.reportUploadedDate} at {selectedLabOrder.reportUploadedTime}
+                        </Text>
+                        <Text style={[styles.medicineQty, { marginTop: 8, color: '#27ae60', fontWeight: '600' }]}>
+                          ✓ Visible to patient and doctor
+                        </Text>
+                      </View>
+                    ) : (
+                      <>
+                        <Text style={styles.medicineQty}>
+                          Select and upload the lab report image. It will be visible to both patient and doctor.
+                        </Text>
+                        
+                        {selectedReportImage && (
+                          <View style={styles.imagePreviewContainer}>
+                            <Text style={styles.imagePreviewLabel}>Selected Image:</Text>
+                            <Text style={styles.imagePreviewName}>{selectedReportImage.filename || 'report.jpg'}</Text>
+                            <Text style={styles.imagePreviewSize}>
+                              ({(selectedReportImage.fileSize / 1024 / 1024).toFixed(2)} MB)
+                            </Text>
+                          </View>
+                        )}
+                      </>
+                    )}
+                  </View>
+                )}
+
+                {/* Action Buttons */}
+                <View style={styles.actionButtonsContainer}>
+                  {!selectedLabOrder.sampleCollected && (
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: '#27ae60' }]}
+                      onPress={async () => {
+                        try {
+                          await updateLabTestOrder(selectedLabOrder.id, {
+                            sampleCollected: true,
+                            sampleCollectionTime: new Date().toISOString(),
+                          });
+                          Alert.alert('Success', 'Sample marked as collected');
+                          setLabModalVisible(false);
+                          loadLabTestOrders();
+                        } catch (error) {
+                          Alert.alert('Error', 'Failed to update sample status');
+                        }
+                      }}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color="white" />
+                      <Text style={styles.actionButtonText}>Mark Sample as Collected</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {selectedLabOrder.sampleCollected && selectedLabOrder.reportStatus !== 'uploaded' && (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: uploadingReport ? '#ccc' : '#3498db' }]}
+                        onPress={pickReportImage}
+                        disabled={uploadingReport}
+                      >
+                        <Ionicons name="image" size={20} color="white" />
+                        <Text style={styles.actionButtonText}>
+                          {selectedReportImage ? 'Change Image' : 'Select Report Image'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.actionButton, { 
+                          backgroundColor: uploadingReport ? '#ccc' : '#f093fb',
+                          marginTop: 10
+                        }]}
+                        onPress={uploadLabReport}
+                        disabled={uploadingReport || !selectedReportImage}
+                      >
+                        {uploadingReport ? (
+                          <>
+                            <ActivityIndicator size="small" color="white" />
+                            <Text style={styles.actionButtonText}>Uploading...</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Ionicons name="cloud-upload" size={20} color="white" />
+                            <Text style={styles.actionButtonText}>Upload Report</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#f093fb" />
-      
+
+      {/* Order Detail Modal */}
+      <OrderDetailModal />
+
+      {/* Delivery Detail Modal */}
+      <DeliveryDetailModal />
+
+      {/* Lab Detail Modal */}
+      <LabDetailModal />
+
       {/* Header */}
-      <LinearGradient
-        colors={['#f093fb', '#f5576c']}
-        style={styles.header}
-      >
+      <LinearGradient colors={['#f093fb', '#f5576c']} style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.pharmacyInfo}>
             <View style={styles.avatarContainer}>
@@ -61,7 +1562,7 @@ const PharmacyDashboard = () => {
             <View style={styles.pharmacyDetails}>
               <Text style={styles.welcomeText}>Welcome back,</Text>
               <Text style={styles.pharmacyName}>ABC Medical Store</Text>
-              <Text style={styles.ownerName}>Owner: John Doe</Text>
+              <Text style={styles.ownerName}>Manager: John Doe</Text>
             </View>
           </View>
           <TouchableOpacity style={styles.logoutButton} onPress={logout}>
@@ -70,38 +1571,177 @@ const PharmacyDashboard = () => {
         </View>
       </LinearGradient>
 
-      {/* Content */}
-      <ScrollView style={styles.content}>
-        <Text style={styles.sectionTitle}>Pharmacy Dashboard</Text>
-        
-        <View style={styles.menuGrid}>
-          {pharmacyMenuItems.map((item) => (
-            <TouchableOpacity key={item.id} style={[styles.menuItem, { backgroundColor: item.color }]}>
-              <Ionicons name={item.icon} size={30} color="white" />
-              <Text style={styles.menuItemText}>{item.title}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'orders' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('orders');
+            setSelectedLabType(null);
+          }}
+        >
+          <Ionicons name="bag" size={20} color={activeTab === 'orders' ? '#f093fb' : '#999'} />
+          <Text style={[styles.tabText, activeTab === 'orders' && styles.activeTabText]}>
+            Orders
+          </Text>
+        </TouchableOpacity>
 
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <Text style={styles.statsTitle}>Today's Sales</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>₹15,230</Text>
-              <Text style={styles.statLabel}>Revenue</Text>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'labs' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('labs');
+            setSelectedLabType(null);
+          }}
+        >
+          <Ionicons name="flask" size={20} color={activeTab === 'labs' ? '#f093fb' : '#999'} />
+          <Text style={[styles.tabText, activeTab === 'labs' && styles.activeTabText]}>
+            Labs
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'delivery' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('delivery');
+            setSelectedLabType(null);
+          }}
+        >
+          <Ionicons name="bicycle" size={20} color={activeTab === 'delivery' ? '#f093fb' : '#999'} />
+          <Text style={[styles.tabText, activeTab === 'delivery' && styles.activeTabText]}>
+            Delivery
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Content */}
+      {activeTab === 'orders' ? (
+        <ScrollView
+          style={styles.content}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+        >
+          <Text style={styles.sectionTitle}>Medicine Orders</Text>
+
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#f093fb" />
+              <Text style={styles.loadingText}>Loading orders...</Text>
             </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>48</Text>
-              <Text style={styles.statLabel}>Orders</Text>
+          ) : ordersData.length > 0 ? (
+            ordersData.map((order) => <OrderCard key={order.id} item={order} />)
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="inbox-outline" size={50} color="#ccc" />
+              <Text style={styles.emptyText}>No pending orders</Text>
             </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>12</Text>
-              <Text style={styles.statLabel}>Low Stock</Text>
+          )}
+        </ScrollView>
+      ) : activeTab === 'labs' ? (
+        <ScrollView
+          style={styles.content}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
+            setRefreshing(true);
+            loadLabTestOrders();
+            setRefreshing(false);
+          }} />}
+        >
+          <Text style={styles.sectionTitle}>Lab Test Orders</Text>
+
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#f093fb" />
+              <Text style={styles.loadingText}>Loading lab orders...</Text>
             </View>
+          ) : filteredLabOrders.length > 0 ? (
+            filteredLabOrders.map((labOrder) => (
+              <TouchableOpacity
+                key={labOrder.id}
+                style={styles.labTestRequestCard}
+                onPress={() => {
+                  setSelectedLabOrder(labOrder);
+                  setLabModalVisible(true);
+                }}
+              >
+                <View style={styles.labTestRequestHeader}>
+                  <View style={styles.labTestRequestInfo}>
+                    <Text style={styles.labTestRequestPatient}>{labOrder.patientName}</Text>
+                    <Text style={styles.labTestRequestEmail}>{labOrder.patientEmail}</Text>
+                    <Text style={styles.labTestRequestPhone}>{labOrder.patientPhone}</Text>
+                  </View>
+                  <View style={[
+                    styles.labTestStatusBadge,
+                    labOrder.sampleCollected ? styles.collectedBadge : styles.pendingBadge
+                  ]}>
+                    <Text style={styles.labTestStatusText}>
+                      {labOrder.sampleCollected ? 'Collected' : 'Pending'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.labTestRequestDetails}>
+                  <Text style={styles.labTestCount}>
+                    {labOrder.requestedTests?.length || 0} test{labOrder.requestedTests?.length !== 1 ? 's' : ''}
+                  </Text>
+                  <Text style={styles.labTestDateInfo}>
+                    Ordered: {labOrder.orderDate}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="flask-outline" size={50} color="#ccc" />
+              <Text style={styles.emptyText}>No pending lab test orders</Text>
+            </View>
+          )}
+        </ScrollView>
+      ) : activeTab === 'delivery' ? (
+        <ScrollView
+          style={styles.content}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
+            setRefreshing(true);
+            loadDeliveryOrders();
+            setRefreshing(false);
+          }} />}
+        >
+          <Text style={styles.sectionTitle}>Delivery Orders</Text>
+
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#f093fb" />
+              <Text style={styles.loadingText}>Loading delivery orders...</Text>
+            </View>
+          ) : deliveryOrders.length > 0 ? (
+            deliveryOrders.map((order) => <DeliveryOrderCard key={order.id} item={order} />)
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="bicycle-outline" size={50} color="#ccc" />
+              <Text style={styles.emptyText}>No pending deliveries</Text>
+            </View>
+          )}
+        </ScrollView>
+      ) : (
+        <ScrollView style={styles.content}>
+          <Text style={styles.sectionTitle}>Select Lab Test Type</Text>
+          <View style={styles.labTypeGrid}>
+            {labTestTypes.map((testType) => (
+              <TouchableOpacity
+                key={testType.id}
+                style={[styles.labTypeCard, { borderLeftColor: testType.color }]}
+                onPress={() => setSelectedLabType(testType.id)}
+              >
+                <View
+                  style={[styles.labTypeIconContainer, { backgroundColor: testType.color }]}
+                >
+                  <Ionicons name={testType.icon} size={30} color="white" />
+                </View>
+                <Text style={styles.labTypeName}>{testType.name}</Text>
+                <Text style={styles.labTypeDescription}>{testType.description}</Text>
+                <Text style={styles.viewOrdersText}>View Orders →</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -156,67 +1796,588 @@ const styles = StyleSheet.create({
   logoutButton: {
     padding: 10,
   },
+  // Tab Navigation Styles
+  tabContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: 'white',
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#f093fb',
+  },
+  tabText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#999',
+  },
+  activeTabText: {
+    color: '#f093fb',
+  },
+  // Content Styles
   content: {
     flex: 1,
     paddingHorizontal: 20,
+    paddingVertical: 15,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#1E293B',
-    marginVertical: 20,
+    marginVertical: 15,
     textAlign: 'center',
   },
-  menuGrid: {
+  // Order Card Styles
+  orderCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#f093fb',
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  orderIdText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  patientNameText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  itemsText: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 8,
+  },
+  amountText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f093fb',
+    marginBottom: 8,
+  },
+  phoneText: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 12,
+  },
+  // Lab Order Card Styles
+  labOrderCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#e91e63',
+  },
+  labOrderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  labOrderIdText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  labInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  labInfoText: {
+    fontSize: 13,
+    color: '#555',
+    marginLeft: 8,
+  },
+  labDateText: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 12,
+  },
+  // Action Buttons
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  button: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  approveButton: {
+    backgroundColor: '#27ae60',
+  },
+  rejectButton: {
+    backgroundColor: '#e74c3c',
+  },
+  sendReportButton: {
+    backgroundColor: '#f093fb',
+    marginTop: 8,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  // Lab Types Grid
+  labTypeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 30,
+    paddingVertical: 10,
   },
-  menuItem: {
+  labTypeCard: {
     width: '48%',
-    aspectRatio: 1,
-    borderRadius: 15,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    elevation: 2,
+  },
+  labTypeIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
   },
-  menuItemText: {
-    color: 'white',
+  labTypeName: {
     fontSize: 14,
-    fontWeight: '600',
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  statsContainer: {
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
-  },
-  statsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#1E293B',
-    marginBottom: 15,
-    textAlign: 'center',
+    marginBottom: 4,
   },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+  labTypeDescription: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 8,
   },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  viewOrdersText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: '#f093fb',
   },
-  statLabel: {
+  // Back Button
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginBottom: 15,
+  },
+  backButtonText: {
+    marginLeft: 8,
     fontSize: 14,
-    color: '#6B7280',
-    marginTop: 5,
+    fontWeight: '600',
+    color: '#f093fb',
+  },
+  // Empty State
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#999',
+    marginTop: 30,
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  modalContent: {
+    padding: 20,
+  },
+  detailSection: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+  },
+  detailSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f093fb',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+    flex: 1,
+    textAlign: 'right',
+  },
+  medicineItem: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#f093fb',
+  },
+  medicineNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  medicineName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b',
+    flex: 1,
+  },
+  medicineQty: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#f093fb',
+  },
+  medicineDosage: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  medicineFrequency: {
+    fontSize: 12,
+    color: '#64748b',
+    marginBottom: 4,
+  },
+  medicinePrice: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#27ae60',
+    marginTop: 4,
+  },
+  totalAmount: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#f093fb',
+  },
+  noData: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  actionButtonsContainer: {
+    gap: 12,
+    marginBottom: 30,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 8,
+  },
+  approveActionButton: {
+    backgroundColor: '#27ae60',
+  },
+  rejectActionButton: {
+    backgroundColor: '#e74c3c',
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
+  },
+  // Delivery Order Styles
+  deliveryOrderCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#27ae60',
+  },
+  deliveryOrderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  deliveryOrderIdText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  deliveryPatientName: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  deliveryStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  deliveryStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deliveryInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  deliveryInfoText: {
+    fontSize: 13,
+    color: '#555',
+    marginLeft: 8,
+    flex: 1,
+  },
+  deliveryAmountText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f093fb',
+    marginBottom: 10,
+  },
+  deliveryMedicinesPreview: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  medicinesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  medicinesText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  // Status Progress Styles
+  statusProgressContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  statusStep: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statusDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statusStepLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1e293b',
+    textAlign: 'center',
+  },
+  statusLine: {
+    flex: 0.6,
+    height: 2,
+    backgroundColor: '#ddd',
+    marginHorizontal: 4,
+    marginTop: 8,
+  },
+  // Delivery Action Buttons
+  assignButton: {
+    backgroundColor: '#3498db',
+  },
+  pickupButton: {
+    backgroundColor: '#9b59b6',
+  },
+  transitButton: {
+    backgroundColor: '#e67e22',
+  },
+  deliveredButton: {
+    backgroundColor: '#27ae60',
+  },
+  // Loading State
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#666',
+  },
+  // Lab Test Card Styles
+  labTestRequestCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#e91e63',
+    elevation: 2,
+  },
+  labTestRequestHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  labTestRequestInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  labTestRequestPatient: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  labTestRequestEmail: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  labTestRequestPhone: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  labTestStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  pendingBadge: {
+    backgroundColor: '#fff3cd',
+  },
+  collectedBadge: {
+    backgroundColor: '#d4edda',
+  },
+  labTestStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#333',
+  },
+  labTestRequestDetails: {
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 12,
+  },
+  labTestCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  labTestDateInfo: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 6,
+  },
+  // Image Upload Styles
+  imagePreviewContainer: {
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3498db',
+  },
+  imagePreviewLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 6,
+  },
+  imagePreviewName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  imagePreviewSize: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  // Info Row
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  phoneText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 6,
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 12,
   },
 });
 

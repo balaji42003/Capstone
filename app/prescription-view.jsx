@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+    Alert,
     Dimensions,
     FlatList,
     Modal,
@@ -14,6 +15,7 @@ import {
     Text,
     TouchableOpacity,
     View,
+    Image,
 } from 'react-native';
 
 let LinearGradient;
@@ -35,6 +37,16 @@ const PrescriptionView = () => {
   const [loading, setLoading] = useState(true);
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [showFullPrescription, setShowFullPrescription] = useState(false);
+  
+  // Lab Test Order States
+  const [showLabOrderModal, setShowLabOrderModal] = useState(false);
+  const [showLabConfirmModal, setShowLabConfirmModal] = useState(false);
+  const [selectedLabTestsToOrder, setSelectedLabTestsToOrder] = useState([]);
+  const [medicineOrderData, setMedicineOrderData] = useState(null);
+  const [labTestOrders, setLabTestOrders] = useState([]);
+  const [userEmail, setUserEmail] = useState(null);
+  const [reportViewVisible, setReportViewVisible] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
 
   // Sample prescriptions data with different doctors
   const samplePrescriptions = [
@@ -187,6 +199,7 @@ const PrescriptionView = () => {
 
       const sessionData = JSON.parse(userSession);
       const patientEmail = sessionData.email;
+      setUserEmail(patientEmail);
 
       // Fetch prescriptions from Firebase
       const response = await fetch(
@@ -208,12 +221,50 @@ const PrescriptionView = () => {
         setPrescriptions([]);
       }
 
+      // Load lab test orders
+      await loadLabTestOrdersData(patientEmail);
+
       setLoading(false);
     } catch (error) {
       console.error('Error loading prescriptions:', error);
       setPrescriptions([]);
       setLoading(false);
     }
+  };
+
+  const loadLabTestOrdersData = async (patientEmail) => {
+    try {
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json'
+      );
+      const data = await response.json();
+
+      if (data) {
+        // Filter lab test orders for this patient
+        const patientLabOrders = Object.entries(data)
+          .filter(([key, order]) => order.patientEmail === patientEmail)
+          .map(([key, order]) => ({
+            id: key,
+            ...order,
+          }));
+
+        setLabTestOrders(patientLabOrders);
+      } else {
+        setLabTestOrders([]);
+      }
+    } catch (error) {
+      console.error('Error loading lab test orders:', error);
+      setLabTestOrders([]);
+    }
+  };
+
+  const getLabReportForPrescription = (prescriptionId) => {
+    return labTestOrders.find(order => order.prescriptionId === prescriptionId && order.reportStatus === 'uploaded');
+  };
+
+  const handleViewReport = (report) => {
+    setSelectedReport(report);
+    setReportViewVisible(true);
   };
 
   const handleOpenPrescription = (prescription) => {
@@ -224,6 +275,199 @@ const PrescriptionView = () => {
   const handleClosePrescription = () => {
     setShowFullPrescription(false);
     setSelectedPrescription(null);
+  };
+
+  const handleOrderMedicine = async (prescription) => {
+    try {
+      // Fetch user session to get email
+      const userSession = await AsyncStorage.getItem('userSession');
+      if (!userSession) {
+        Alert.alert('Error', 'User session not found. Please log in again.');
+        return;
+      }
+
+      const sessionData = JSON.parse(userSession);
+      const userEmail = sessionData.email;
+      const userName = sessionData.name || 'User';
+
+      // Fetch user address from user-details
+      const userDetailsResponse = await fetch(
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/user-details.json`
+      );
+      const userDetailsData = await userDetailsResponse.json();
+
+      let userAddress = 'Address not found';
+      if (userDetailsData) {
+        // Find user details by email
+        const userDetailsEntry = Object.entries(userDetailsData).find(
+          ([key, details]) => details.email === userEmail || details.userEmail === userEmail
+        );
+        if (userDetailsEntry) {
+          const [, details] = userDetailsEntry;
+          userAddress = details.address || details.location || 'Address not provided';
+        }
+      }
+
+      // Check if there are lab tests
+      if (prescription.requestedLabTests && prescription.requestedLabTests.length > 0) {
+        // Store order data and show lab test modal
+        setMedicineOrderData({
+          prescription,
+          userEmail,
+          userName,
+          userAddress,
+        });
+        setSelectedLabTestsToOrder(prescription.requestedLabTests.map((test, idx) => ({ ...test, selected: true, index: idx })));
+        setShowLabOrderModal(true);
+      } else {
+        // No lab tests, proceed with medicine order only
+        showConfirmAndOrder(prescription, userEmail, userName, userAddress, null);
+      }
+    } catch (error) {
+      console.error('Error processing order:', error);
+      Alert.alert('Error', 'Failed to process order. Please try again.');
+    }
+  };
+
+  const showConfirmAndOrder = (prescription, userEmail, userName, userAddress, labTests) => {
+    const labTestsText = labTests && labTests.length > 0 
+      ? `\n\nLab Tests: ${labTests.filter(t => t.selected).map(t => t.testName).join(', ')}`
+      : '';
+
+    Alert.alert(
+      'Confirm Order',
+      `Are you sure you want to place this order?\n\nDelivery Address: ${userAddress}${labTestsText}`,
+      [
+        {
+          text: 'Cancel',
+          onPress: () => {
+            setShowLabOrderModal(false);
+            console.log('Order cancelled');
+          },
+          style: 'cancel',
+        },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            await saveMedicineOrder(prescription, userEmail, userName, userAddress);
+            if (labTests && labTests.length > 0) {
+              const selectedTests = labTests.filter(t => t.selected);
+              if (selectedTests.length > 0) {
+                await saveLabTestOrder(prescription, userEmail, userName, userAddress, selectedTests);
+              }
+            }
+            setShowLabOrderModal(false);
+            setShowLabConfirmModal(false);
+          },
+          style: 'default',
+        },
+      ],
+      { cancelable: false }
+    );
+  };
+
+  const saveMedicineOrder = async (prescription, userEmail, userName, userAddress) => {
+    try {
+      const medicineOrder = {
+        orderId: `MO-${Date.now()}`,
+        prescriptionId: prescription.id,
+        prescriptionNumber: prescription.prescriptionNumber,
+        patientEmail: userEmail,
+        patientName: userName,
+        deliveryAddress: userAddress,
+        doctorName: prescription.doctorName,
+        doctorSpecialty: prescription.doctorSpecialty,
+        diagnosis: prescription.diagnosis,
+        medicines: prescription.medicines,
+        orderDate: new Date().toISOString().split('T')[0],
+        orderTime: new Date().toLocaleTimeString(),
+        orderStatus: 'pending',
+        pharmacyStatus: 'not-assigned',
+      };
+
+      // Save to medicine-orders node
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/medicine-orders.json',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(medicineOrder),
+        }
+      );
+
+      if (response.ok) {
+        const responseData = await response.json();
+        Alert.alert(
+          'Success',
+          'Medicine order placed successfully! Your pharmacy will process it soon.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                handleClosePrescription();
+              },
+            },
+          ]
+        );
+        console.log('Medicine order saved:', responseData);
+      } else {
+        Alert.alert('Error', 'Failed to save medicine order. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error saving medicine order:', error);
+      Alert.alert('Error', 'Failed to save medicine order. Please try again.');
+    }
+  };
+
+  const saveLabTestOrder = async (prescription, userEmail, userName, userAddress, selectedTests) => {
+    try {
+      const labTestOrder = {
+        labTestOrderId: `LTO-${Date.now()}`,
+        prescriptionId: prescription.id,
+        prescriptionNumber: prescription.prescriptionNumber,
+        patientEmail: userEmail,
+        patientName: userName,
+        patientPhone: prescription.patientPhone || '',
+        deliveryAddress: userAddress,
+        doctorName: prescription.doctorName,
+        doctorSpecialty: prescription.doctorSpecialty,
+        diagnosis: prescription.diagnosis,
+        requestedTests: selectedTests.map(test => ({
+          testId: test.testId,
+          testName: test.testName,
+          testDescription: test.testDescription,
+          status: 'pending',
+        })),
+        orderDate: new Date().toISOString().split('T')[0],
+        orderTime: new Date().toLocaleTimeString(),
+        orderStatus: 'pending',
+        sampleCollected: false,
+      };
+
+      // Save to lab-test-orders node
+      const response = await fetch(
+        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(labTestOrder),
+        }
+      );
+
+      if (response.ok) {
+        const responseData = await response.json();
+        console.log('Lab test order saved:', responseData);
+      } else {
+        Alert.alert('Error', 'Failed to save lab test order. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error saving lab test order:', error);
+      Alert.alert('Error', 'Failed to save lab test order. Please try again.');
+    }
   };
 
   const renderPrescriptionListItem = ({ item }) => (
@@ -456,6 +700,69 @@ const PrescriptionView = () => {
                   </View>
                 </View>
 
+                {/* Lab Tests Section */}
+                {selectedPrescription.requestedLabTests && selectedPrescription.requestedLabTests.length > 0 && (
+                  <View style={styles.formSection}>
+                    <View style={styles.labTestSectionHeader}>
+                      <MaterialIcons name="science" size={22} color="#4ECDC4" />
+                      <Text style={styles.formSectionTitle}>REQUESTED LAB TESTS</Text>
+                    </View>
+                    
+                    {selectedPrescription.requestedLabTests.map((test, index) => {
+                      const hasReport = getLabReportForPrescription(selectedPrescription.id) ? true : false;
+                      const displayStatus = hasReport ? 'completed' : test.status;
+                      
+                      return (
+                        <View key={index} style={styles.labTestCard}>
+                          <View style={styles.labTestCardHeader}>
+                            <View style={styles.labTestNumber}>
+                              <Text style={styles.labTestNumberText}>{index + 1}</Text>
+                            </View>
+                            <View style={styles.labTestInfo}>
+                              <Text style={styles.labTestName}>{test.testName}</Text>
+                              <Text style={styles.labTestDescription}>{test.testDescription}</Text>
+                            </View>
+                            <View style={[styles.labTestStatus, { backgroundColor: displayStatus === 'pending' ? '#fef3c7' : '#d1fae5' }]}>
+                              <Text style={[styles.labTestStatusText, { color: displayStatus === 'pending' ? '#b45309' : '#047857' }]}>
+                                {displayStatus === 'pending' ? 'Pending' : 'Completed'}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.labTestDateInfo}>
+                            <Ionicons name="calendar" size={14} color="#999" />
+                            <Text style={styles.labTestDate}>Requested: {test.requestedDate}</Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+
+                    {/* Lab Report Section */}
+                    {getLabReportForPrescription(selectedPrescription.id) && (
+                      <View style={[styles.formSection, { marginTop: 20, backgroundColor: '#e8f5e9', borderLeftWidth: 4, borderLeftColor: '#4CAF50' }]}>
+                        <View style={styles.reportHeader}>
+                          <Ionicons name="document" size={24} color="#4CAF50" />
+                          <Text style={[styles.formSectionTitle, { color: '#4CAF50', marginLeft: 10 }]}>LAB REPORT</Text>
+                        </View>
+                        <View style={styles.reportInfo}>
+                          <Text style={styles.reportInfoText}>
+                            ✓ Report uploaded on {getLabReportForPrescription(selectedPrescription.id).reportUploadedDate}
+                          </Text>
+                          <Text style={styles.reportInfoText}>
+                            Time: {getLabReportForPrescription(selectedPrescription.id).reportUploadedTime}
+                          </Text>
+                        </View>
+                        <TouchableOpacity 
+                          style={styles.viewReportButton}
+                          onPress={() => handleViewReport(getLabReportForPrescription(selectedPrescription.id))}
+                        >
+                          <Ionicons name="image" size={18} color="white" />
+                          <Text style={styles.viewReportButtonText}>View Report Image</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                )}
+
                 {/* Document Footer */}
                 <View style={styles.documentFooter}>
                   <View style={styles.signatureSection}>
@@ -472,9 +779,235 @@ const PrescriptionView = () => {
               </View>
               
               <View style={styles.documentPadding} />
+              
+              {/* Order Medicine Button */}
+              <View style={styles.orderButtonContainer}>
+                <TouchableOpacity 
+                  style={styles.orderMedicineButton}
+                  onPress={() => handleOrderMedicine(selectedPrescription)}
+                >
+                  <MaterialIcons name="local-pharmacy" size={20} color="white" />
+                  <Text style={styles.orderButtonText}>Order Medicine</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           )}
         </SafeAreaView>
+      </Modal>
+
+      {/* Lab Test Order Modal */}
+      <Modal
+        visible={showLabOrderModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowLabOrderModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.labOrderModalContainer}>
+            <View style={styles.labOrderModalHeader}>
+              <Text style={styles.labOrderModalTitle}>Lab Tests Available</Text>
+              <Text style={styles.labOrderModalSubtitle}>
+                Your doctor has suggested these lab tests
+              </Text>
+            </View>
+
+            <ScrollView style={styles.labTestsScrollContainer} showsVerticalScrollIndicator={false}>
+              {selectedLabTestsToOrder.length > 0 && (
+                <View style={styles.labTestsList}>
+                  {selectedLabTestsToOrder.map((test, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.labTestSelectionCard}
+                      onPress={() => {
+                        const updated = [...selectedLabTestsToOrder];
+                        updated[index].selected = !updated[index].selected;
+                        setSelectedLabTestsToOrder(updated);
+                      }}
+                    >
+                      <View style={styles.labTestSelectionHeader}>
+                        <View style={styles.labTestCheckbox}>
+                          {test.selected && (
+                            <Ionicons name="checkmark-circle" size={24} color="#4ECDC4" />
+                          )}
+                          {!test.selected && (
+                            <View style={styles.labTestUncheckedBox} />
+                          )}
+                        </View>
+                        <View style={styles.labTestSelectionInfo}>
+                          <Text style={styles.labTestSelectionName}>{test.testName}</Text>
+                          <Text style={styles.labTestSelectionDescription}>{test.testDescription}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.labOrderModalButtons}>
+              <TouchableOpacity
+                style={[styles.labOrderButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowLabOrderModal(false);
+                  showConfirmAndOrder(medicineOrderData.prescription, medicineOrderData.userEmail, medicineOrderData.userName, medicineOrderData.userAddress, null);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Medicine Only</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.labOrderButton, styles.labOnlyButton]}
+                onPress={() => {
+                  const selected = selectedLabTestsToOrder.filter(t => t.selected);
+                  if (selected.length === 0) {
+                    Alert.alert('Error', 'Please select at least one lab test');
+                    return;
+                  }
+                  setShowLabConfirmModal(true);
+                }}
+              >
+                <Text style={styles.labOnlyButtonText}>Lab Tests Only</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.labOrderButton, styles.bothButton]}
+                onPress={() => {
+                  const selected = selectedLabTestsToOrder.filter(t => t.selected);
+                  if (selected.length === 0) {
+                    Alert.alert('Error', 'Please select at least one lab test');
+                    return;
+                  }
+                  setShowLabConfirmModal(true);
+                }}
+              >
+                <Text style={styles.bothButtonText}>Both</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Lab Home Collection Confirmation Modal */}
+      <Modal
+        visible={showLabConfirmModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowLabConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContainer}>
+            <View style={styles.confirmModalContent}>
+              <Ionicons name="home" size={60} color="#4ECDC4" style={styles.confirmIcon} />
+              
+              <Text style={styles.confirmTitle}>Lab Sample Collection</Text>
+              
+              <Text style={styles.confirmMessage}>
+                Our pharmacy team will visit your home to collect samples for the requested lab tests at your convenience.
+              </Text>
+
+              <View style={styles.confirmDetails}>
+                <View style={styles.confirmDetailRow}>
+                  <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                  <Text style={styles.confirmDetailText}>Home sample collection</Text>
+                </View>
+                <View style={styles.confirmDetailRow}>
+                  <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                  <Text style={styles.confirmDetailText}>Hygienic & hassle-free</Text>
+                </View>
+                <View style={styles.confirmDetailRow}>
+                  <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                  <Text style={styles.confirmDetailText}>Quick results & updates</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.confirmButtonsSection}>
+              <TouchableOpacity
+                style={[styles.confirmButton, styles.declineButton]}
+                onPress={() => {
+                  setShowLabConfirmModal(false);
+                  setShowLabOrderModal(false);
+                  showConfirmAndOrder(medicineOrderData.prescription, medicineOrderData.userEmail, medicineOrderData.userName, medicineOrderData.userAddress, null);
+                }}
+              >
+                <Text style={styles.declineButtonText}>Skip Tests</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.confirmButton, styles.acceptButton]}
+                onPress={() => {
+                  const selected = selectedLabTestsToOrder.filter(t => t.selected);
+                  showConfirmAndOrder(medicineOrderData.prescription, medicineOrderData.userEmail, medicineOrderData.userName, medicineOrderData.userAddress, selected);
+                }}
+              >
+                <Text style={styles.acceptButtonText}>Order Tests</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Report View Modal */}
+      <Modal
+        visible={reportViewVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setReportViewVisible(false)}
+      >
+        <View style={styles.reportModalOverlay}>
+          <View style={styles.reportModalContainer}>
+            <View style={styles.reportModalHeader}>
+              <TouchableOpacity onPress={() => setReportViewVisible(false)}>
+                <Ionicons name="close" size={28} color="#1F2937" />
+              </TouchableOpacity>
+              <Text style={styles.reportModalTitle}>Lab Report</Text>
+              <View style={{ width: 28 }} />
+            </View>
+
+            {selectedReport && (
+              <ScrollView style={styles.reportModalContent}>
+                {/* Report Info */}
+                <View style={styles.reportDetailSection}>
+                  <Text style={styles.reportDetailLabel}>Test Report</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.testsList}</Text>
+                  
+                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>Uploaded Date</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.reportUploadedDate}</Text>
+                  
+                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>Uploaded Time</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.reportUploadedTime}</Text>
+                </View>
+
+                {/* Report Image */}
+                {selectedReport.reportImage && (
+                  <View style={styles.reportImageContainer}>
+                    <Text style={styles.reportImageLabel}>Report Image</Text>
+                    <Image
+                      source={{ uri: `data:image/jpeg;base64,${selectedReport.reportImage}` }}
+                      style={styles.reportImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                )}
+
+                {/* Doctor Info */}
+                <View style={styles.reportDetailSection}>
+                  <Text style={styles.reportDetailLabel}>Doctor Information</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.doctorName}</Text>
+                  <Text style={[styles.reportDetailValue, { fontSize: 12, color: '#6B7280', marginTop: 4 }]}>
+                    {selectedReport.doctorSpecialty}
+                  </Text>
+                </View>
+
+                {/* Diagnosis */}
+                <View style={styles.reportDetailSection}>
+                  <Text style={styles.reportDetailLabel}>Diagnosis</Text>
+                  <Text style={styles.reportDetailValue}>{selectedReport.diagnosis}</Text>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -982,6 +1515,408 @@ const styles = StyleSheet.create({
   },
   documentPadding: {
     height: 20,
+  },
+  orderButtonContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  orderMedicineButton: {
+    backgroundColor: '#4ECDC4',
+    flexDirection: 'row',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  orderButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  // Lab Test Styles
+  labTestSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  labTestCard: {
+    backgroundColor: '#f0fffe',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4ECDC4',
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  labTestCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  labTestNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#4ECDC4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  labTestNumberText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  labTestInfo: {
+    flex: 1,
+  },
+  labTestName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 3,
+  },
+  labTestDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 16,
+  },
+  labTestStatus: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  labTestStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  labTestDateInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 44,
+  },
+  labTestDate: {
+    fontSize: 12,
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  // Lab Order Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  labOrderModalContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    maxHeight: '90%',
+  },
+  labOrderModalHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  labOrderModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  labOrderModalSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  labTestsScrollContainer: {
+    maxHeight: 350,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  labTestsList: {
+    gap: 12,
+  },
+  labTestSelectionCard: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 14,
+  },
+  labTestSelectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  labTestCheckbox: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  labTestUncheckedBox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    backgroundColor: 'white',
+  },
+  labTestSelectionInfo: {
+    flex: 1,
+  },
+  labTestSelectionName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 3,
+  },
+  labTestSelectionDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 16,
+  },
+  labOrderModalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  labOrderButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  cancelButtonText: {
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  labOnlyButton: {
+    backgroundColor: '#FEF3C7',
+  },
+  labOnlyButtonText: {
+    color: '#92400E',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bothButton: {
+    backgroundColor: '#4ECDC4',
+  },
+  bothButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // Confirmation Modal Styles
+  confirmModalContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 32,
+    paddingBottom: 24,
+    maxHeight: '80%',
+  },
+  confirmModalContent: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  confirmIcon: {
+    marginBottom: 20,
+  },
+  confirmTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  confirmDetails: {
+    gap: 12,
+    backgroundColor: '#f0fffe',
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4ECDC4',
+  },
+  confirmDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  confirmDetailText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+    flex: 1,
+  },
+  confirmButtonsSection: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  declineButton: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  declineButtonText: {
+    color: '#374151',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  acceptButton: {
+    backgroundColor: '#4ECDC4',
+  },
+  acceptButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Report View Modal Styles
+  reportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  reportInfo: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  reportInfoText: {
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: '500',
+    marginBottom: 6,
+  },
+  viewReportButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 8,
+  },
+  viewReportButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  reportModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  reportModalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    maxHeight: '90%',
+    width: '100%',
+    overflow: 'hidden',
+  },
+  reportModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  reportModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  reportModalContent: {
+    padding: 16,
+  },
+  reportDetailSection: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  reportDetailLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  reportDetailValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    lineHeight: 22,
+  },
+  reportImageContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  reportImageLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  reportImage: {
+    width: '100%',
+    height: 400,
+    borderRadius: 8,
+    backgroundColor: 'white',
   },
 });
 
