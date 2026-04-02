@@ -1,43 +1,48 @@
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-    Image,
-} from 'react-native';
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 let LinearGradient;
 try {
-  LinearGradient = require('expo-linear-gradient').LinearGradient;
+  LinearGradient = require("expo-linear-gradient").LinearGradient;
 } catch (e) {
   LinearGradient = ({ children, colors, style, ...props }) => (
-    <View style={[style, { backgroundColor: colors?.[0] || '#4ECDC4' }]} {...props}>
+    <View
+      style={[style, { backgroundColor: colors?.[0] || "#4ECDC4" }]}
+      {...props}
+    >
       {children}
     </View>
   );
 }
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 const PrescriptionView = () => {
   const router = useRouter();
   const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [showFullPrescription, setShowFullPrescription] = useState(false);
-  
+
   // Lab Test Order States
   const [showLabOrderModal, setShowLabOrderModal] = useState(false);
   const [showLabConfirmModal, setShowLabConfirmModal] = useState(false);
@@ -51,146 +56,152 @@ const PrescriptionView = () => {
   // Sample prescriptions data with different doctors
   const samplePrescriptions = [
     {
-      id: 'P001',
-      patientName: 'John Doe',
-      patientAge: '35',
-      patientGender: 'Male',
-      doctorName: 'Dr. Sarah Wilson',
-      doctorSpecialty: 'General Physician',
-      doctorQualification: 'MBBS, MD',
-      doctorExperience: '12 years',
-      hospitalName: 'City Medical Center',
-      hospitalAddress: '123 Main Street, Downtown',
-      date: '2025-09-10',
-      diagnosis: 'Upper Respiratory Tract Infection',
-      symptoms: ['Cough', 'Fever', 'Sore Throat', 'Body Ache'],
+      id: "P001",
+      patientName: "John Doe",
+      patientAge: "35",
+      patientGender: "Male",
+      doctorName: "Dr. Sarah Wilson",
+      doctorSpecialty: "General Physician",
+      doctorQualification: "MBBS, MD",
+      doctorExperience: "12 years",
+      hospitalName: "City Medical Center",
+      hospitalAddress: "123 Main Street, Downtown",
+      date: "2025-09-10",
+      diagnosis: "Upper Respiratory Tract Infection",
+      symptoms: ["Cough", "Fever", "Sore Throat", "Body Ache"],
       medicines: [
         {
           id: 1,
-          name: 'Azithromycin',
-          type: 'Tablet',
-          dosage: '500mg',
-          frequency: 'Once daily',
-          duration: '5 days',
-          instructions: 'Take after meals'
+          name: "Azithromycin",
+          type: "Tablet",
+          dosage: "500mg",
+          frequency: "Once daily",
+          duration: "5 days",
+          instructions: "Take after meals",
         },
         {
           id: 2,
-          name: 'Paracetamol',
-          type: 'Tablet',
-          dosage: '650mg',
-          frequency: 'Twice daily',
-          duration: '3 days',
-          instructions: 'Take when fever occurs'
-        }
+          name: "Paracetamol",
+          type: "Tablet",
+          dosage: "650mg",
+          frequency: "Twice daily",
+          duration: "3 days",
+          instructions: "Take when fever occurs",
+        },
       ],
       advice: [
-        'Take plenty of rest',
-        'Drink warm water',
-        'Avoid cold foods',
-        'Return if symptoms persist after 5 days'
+        "Take plenty of rest",
+        "Drink warm water",
+        "Avoid cold foods",
+        "Return if symptoms persist after 5 days",
       ],
-      nextVisit: '2025-09-18',
-      prescriptionNumber: 'RX-2025-001234'
+      nextVisit: "2025-09-18",
+      prescriptionNumber: "RX-2025-001234",
     },
     {
-      id: 'P002',
-      patientName: 'John Doe',
-      patientAge: '35',
-      patientGender: 'Male',
-      doctorName: 'Dr. Michael Chen',
-      doctorSpecialty: 'Cardiologist',
-      doctorQualification: 'MBBS, MD, DM Cardiology',
-      doctorExperience: '15 years',
-      hospitalName: 'Heart Care Institute',
-      hospitalAddress: '456 Health Avenue, Medical District',
-      date: '2025-09-05',
-      diagnosis: 'Hypertension',
-      symptoms: ['High Blood Pressure', 'Headache', 'Dizziness'],
+      id: "P002",
+      patientName: "John Doe",
+      patientAge: "35",
+      patientGender: "Male",
+      doctorName: "Dr. Michael Chen",
+      doctorSpecialty: "Cardiologist",
+      doctorQualification: "MBBS, MD, DM Cardiology",
+      doctorExperience: "15 years",
+      hospitalName: "Heart Care Institute",
+      hospitalAddress: "456 Health Avenue, Medical District",
+      date: "2025-09-05",
+      diagnosis: "Hypertension",
+      symptoms: ["High Blood Pressure", "Headache", "Dizziness"],
       medicines: [
         {
           id: 1,
-          name: 'Amlodipine',
-          type: 'Tablet',
-          dosage: '5mg',
-          frequency: 'Once daily',
-          duration: '30 days',
-          instructions: 'Take in the morning'
+          name: "Amlodipine",
+          type: "Tablet",
+          dosage: "5mg",
+          frequency: "Once daily",
+          duration: "30 days",
+          instructions: "Take in the morning",
         },
         {
           id: 2,
-          name: 'Metoprolol',
-          type: 'Tablet',
-          dosage: '25mg',
-          frequency: 'Twice daily',
-          duration: '30 days',
-          instructions: 'Take with food'
-        }
+          name: "Metoprolol",
+          type: "Tablet",
+          dosage: "25mg",
+          frequency: "Twice daily",
+          duration: "30 days",
+          instructions: "Take with food",
+        },
       ],
       advice: [
-        'Monitor blood pressure daily',
-        'Reduce salt intake',
-        'Regular exercise',
-        'Avoid stress'
+        "Monitor blood pressure daily",
+        "Reduce salt intake",
+        "Regular exercise",
+        "Avoid stress",
       ],
-      nextVisit: '2025-10-05',
-      prescriptionNumber: 'RX-2025-001235'
+      nextVisit: "2025-10-05",
+      prescriptionNumber: "RX-2025-001235",
     },
     {
-      id: 'P003',
-      patientName: 'John Doe',
-      patientAge: '35',
-      patientGender: 'Male',
-      doctorName: 'Dr. Priya Sharma',
-      doctorSpecialty: 'Dermatologist',
-      doctorQualification: 'MBBS, MD Dermatology',
-      doctorExperience: '8 years',
-      hospitalName: 'Skin Care Clinic',
-      hospitalAddress: '789 Beauty Lane, Wellness Center',
-      date: '2025-08-28',
-      diagnosis: 'Eczema',
-      symptoms: ['Dry Skin', 'Itching', 'Redness', 'Inflammation'],
+      id: "P003",
+      patientName: "John Doe",
+      patientAge: "35",
+      patientGender: "Male",
+      doctorName: "Dr. Priya Sharma",
+      doctorSpecialty: "Dermatologist",
+      doctorQualification: "MBBS, MD Dermatology",
+      doctorExperience: "8 years",
+      hospitalName: "Skin Care Clinic",
+      hospitalAddress: "789 Beauty Lane, Wellness Center",
+      date: "2025-08-28",
+      diagnosis: "Eczema",
+      symptoms: ["Dry Skin", "Itching", "Redness", "Inflammation"],
       medicines: [
         {
           id: 1,
-          name: 'Hydrocortisone Cream',
-          type: 'Cream',
-          dosage: '1%',
-          frequency: 'Twice daily',
-          duration: '14 days',
-          instructions: 'Apply thin layer on affected area'
+          name: "Hydrocortisone Cream",
+          type: "Cream",
+          dosage: "1%",
+          frequency: "Twice daily",
+          duration: "14 days",
+          instructions: "Apply thin layer on affected area",
         },
         {
           id: 2,
-          name: 'Cetirizine',
-          type: 'Tablet',
-          dosage: '10mg',
-          frequency: 'Once daily',
-          duration: '10 days',
-          instructions: 'Take at bedtime'
-        }
+          name: "Cetirizine",
+          type: "Tablet",
+          dosage: "10mg",
+          frequency: "Once daily",
+          duration: "10 days",
+          instructions: "Take at bedtime",
+        },
       ],
       advice: [
-        'Keep skin moisturized',
-        'Avoid harsh soaps',
-        'Use cotton clothing',
-        'Avoid scratching'
+        "Keep skin moisturized",
+        "Avoid harsh soaps",
+        "Use cotton clothing",
+        "Avoid scratching",
       ],
-      nextVisit: '2025-09-15',
-      prescriptionNumber: 'RX-2025-001236'
-    }
+      nextVisit: "2025-09-15",
+      prescriptionNumber: "RX-2025-001236",
+    },
   ];
 
   useEffect(() => {
     loadPrescriptionsData();
   }, []);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadPrescriptionsData();
+    setRefreshing(false);
+  };
+
   const loadPrescriptionsData = async () => {
     try {
       setLoading(true);
-      
+
       // Get patient email from session
-      const userSession = await AsyncStorage.getItem('userSession');
+      const userSession = await AsyncStorage.getItem("userSession");
       if (!userSession) {
         setPrescriptions([]);
         setLoading(false);
@@ -203,14 +214,16 @@ const PrescriptionView = () => {
 
       // Fetch prescriptions from Firebase
       const response = await fetch(
-        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/prescriptions.json'
+        "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/prescriptions.json",
       );
       const data = await response.json();
 
       if (data) {
         // Filter prescriptions for this patient
         const patientPrescriptions = Object.entries(data)
-          .filter(([key, prescription]) => prescription.patientEmail === patientEmail)
+          .filter(
+            ([key, prescription]) => prescription.patientEmail === patientEmail,
+          )
           .map(([key, prescription]) => ({
             id: key,
             ...prescription,
@@ -226,7 +239,7 @@ const PrescriptionView = () => {
 
       setLoading(false);
     } catch (error) {
-      console.error('Error loading prescriptions:', error);
+      console.error("Error loading prescriptions:", error);
       setPrescriptions([]);
       setLoading(false);
     }
@@ -235,7 +248,7 @@ const PrescriptionView = () => {
   const loadLabTestOrdersData = async (patientEmail) => {
     try {
       const response = await fetch(
-        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json'
+        "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json",
       );
       const data = await response.json();
 
@@ -253,13 +266,17 @@ const PrescriptionView = () => {
         setLabTestOrders([]);
       }
     } catch (error) {
-      console.error('Error loading lab test orders:', error);
+      console.error("Error loading lab test orders:", error);
       setLabTestOrders([]);
     }
   };
 
   const getLabReportForPrescription = (prescriptionId) => {
-    return labTestOrders.find(order => order.prescriptionId === prescriptionId && order.reportStatus === 'uploaded');
+    return labTestOrders.find(
+      (order) =>
+        order.prescriptionId === prescriptionId &&
+        order.reportStatus === "uploaded",
+    );
   };
 
   const handleViewReport = (report) => {
@@ -280,36 +297,41 @@ const PrescriptionView = () => {
   const handleOrderMedicine = async (prescription) => {
     try {
       // Fetch user session to get email
-      const userSession = await AsyncStorage.getItem('userSession');
+      const userSession = await AsyncStorage.getItem("userSession");
       if (!userSession) {
-        Alert.alert('Error', 'User session not found. Please log in again.');
+        Alert.alert("Error", "User session not found. Please log in again.");
         return;
       }
 
       const sessionData = JSON.parse(userSession);
       const userEmail = sessionData.email;
-      const userName = sessionData.name || 'User';
+      const userName = sessionData.name || "User";
 
       // Fetch user address from user-details
       const userDetailsResponse = await fetch(
-        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/user-details.json`
+        `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/user-details.json`,
       );
       const userDetailsData = await userDetailsResponse.json();
 
-      let userAddress = 'Address not found';
+      let userAddress = "Address not found";
       if (userDetailsData) {
         // Find user details by email
         const userDetailsEntry = Object.entries(userDetailsData).find(
-          ([key, details]) => details.email === userEmail || details.userEmail === userEmail
+          ([key, details]) =>
+            details.email === userEmail || details.userEmail === userEmail,
         );
         if (userDetailsEntry) {
           const [, details] = userDetailsEntry;
-          userAddress = details.address || details.location || 'Address not provided';
+          userAddress =
+            details.address || details.location || "Address not provided";
         }
       }
 
       // Check if there are lab tests
-      if (prescription.requestedLabTests && prescription.requestedLabTests.length > 0) {
+      if (
+        prescription.requestedLabTests &&
+        prescription.requestedLabTests.length > 0
+      ) {
         // Store order data and show lab test modal
         setMedicineOrderData({
           prescription,
@@ -317,56 +339,94 @@ const PrescriptionView = () => {
           userName,
           userAddress,
         });
-        setSelectedLabTestsToOrder(prescription.requestedLabTests.map((test, idx) => ({ ...test, selected: true, index: idx })));
+        setSelectedLabTestsToOrder(
+          prescription.requestedLabTests.map((test, idx) => ({
+            ...test,
+            selected: true,
+            index: idx,
+          })),
+        );
         setShowLabOrderModal(true);
       } else {
         // No lab tests, proceed with medicine order only
-        showConfirmAndOrder(prescription, userEmail, userName, userAddress, null);
+        showConfirmAndOrder(
+          prescription,
+          userEmail,
+          userName,
+          userAddress,
+          null,
+        );
       }
     } catch (error) {
-      console.error('Error processing order:', error);
-      Alert.alert('Error', 'Failed to process order. Please try again.');
+      console.error("Error processing order:", error);
+      Alert.alert("Error", "Failed to process order. Please try again.");
     }
   };
 
-  const showConfirmAndOrder = (prescription, userEmail, userName, userAddress, labTests) => {
-    const labTestsText = labTests && labTests.length > 0 
-      ? `\n\nLab Tests: ${labTests.filter(t => t.selected).map(t => t.testName).join(', ')}`
-      : '';
+  const showConfirmAndOrder = (
+    prescription,
+    userEmail,
+    userName,
+    userAddress,
+    labTests,
+  ) => {
+    const labTestsText =
+      labTests && labTests.length > 0
+        ? `\n\nLab Tests: ${labTests
+            .filter((t) => t.selected)
+            .map((t) => t.testName)
+            .join(", ")}`
+        : "";
 
     Alert.alert(
-      'Confirm Order',
+      "Confirm Order",
       `Are you sure you want to place this order?\n\nDelivery Address: ${userAddress}${labTestsText}`,
       [
         {
-          text: 'Cancel',
+          text: "Cancel",
           onPress: () => {
             setShowLabOrderModal(false);
-            console.log('Order cancelled');
+            console.log("Order cancelled");
           },
-          style: 'cancel',
+          style: "cancel",
         },
         {
-          text: 'Confirm',
+          text: "Confirm",
           onPress: async () => {
-            await saveMedicineOrder(prescription, userEmail, userName, userAddress);
+            await saveMedicineOrder(
+              prescription,
+              userEmail,
+              userName,
+              userAddress,
+            );
             if (labTests && labTests.length > 0) {
-              const selectedTests = labTests.filter(t => t.selected);
+              const selectedTests = labTests.filter((t) => t.selected);
               if (selectedTests.length > 0) {
-                await saveLabTestOrder(prescription, userEmail, userName, userAddress, selectedTests);
+                await saveLabTestOrder(
+                  prescription,
+                  userEmail,
+                  userName,
+                  userAddress,
+                  selectedTests,
+                );
               }
             }
             setShowLabOrderModal(false);
             setShowLabConfirmModal(false);
           },
-          style: 'default',
+          style: "default",
         },
       ],
-      { cancelable: false }
+      { cancelable: false },
     );
   };
 
-  const saveMedicineOrder = async (prescription, userEmail, userName, userAddress) => {
+  const saveMedicineOrder = async (
+    prescription,
+    userEmail,
+    userName,
+    userAddress,
+  ) => {
     try {
       const medicineOrder = {
         orderId: `MO-${Date.now()}`,
@@ -379,49 +439,58 @@ const PrescriptionView = () => {
         doctorSpecialty: prescription.doctorSpecialty,
         diagnosis: prescription.diagnosis,
         medicines: prescription.medicines,
-        orderDate: new Date().toISOString().split('T')[0],
+        orderDate: new Date().toISOString().split("T")[0],
         orderTime: new Date().toLocaleTimeString(),
-        orderStatus: 'pending',
-        pharmacyStatus: 'not-assigned',
+        orderStatus: "pending",
+        pharmacyStatus: "not-assigned",
       };
 
       // Save to medicine-orders node
       const response = await fetch(
-        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/medicine-orders.json',
+        "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/medicine-orders.json",
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify(medicineOrder),
-        }
+        },
       );
 
       if (response.ok) {
         const responseData = await response.json();
         Alert.alert(
-          'Success',
-          'Medicine order placed successfully! Your pharmacy will process it soon.',
+          "Success",
+          "Medicine order placed successfully! Your pharmacy will process it soon.",
           [
             {
-              text: 'OK',
+              text: "OK",
               onPress: () => {
                 handleClosePrescription();
               },
             },
-          ]
+          ],
         );
-        console.log('Medicine order saved:', responseData);
+        console.log("Medicine order saved:", responseData);
       } else {
-        Alert.alert('Error', 'Failed to save medicine order. Please try again.');
+        Alert.alert(
+          "Error",
+          "Failed to save medicine order. Please try again.",
+        );
       }
     } catch (error) {
-      console.error('Error saving medicine order:', error);
-      Alert.alert('Error', 'Failed to save medicine order. Please try again.');
+      console.error("Error saving medicine order:", error);
+      Alert.alert("Error", "Failed to save medicine order. Please try again.");
     }
   };
 
-  const saveLabTestOrder = async (prescription, userEmail, userName, userAddress, selectedTests) => {
+  const saveLabTestOrder = async (
+    prescription,
+    userEmail,
+    userName,
+    userAddress,
+    selectedTests,
+  ) => {
     try {
       const labTestOrder = {
         labTestOrderId: `LTO-${Date.now()}`,
@@ -429,49 +498,52 @@ const PrescriptionView = () => {
         prescriptionNumber: prescription.prescriptionNumber,
         patientEmail: userEmail,
         patientName: userName,
-        patientPhone: prescription.patientPhone || '',
+        patientPhone: prescription.patientPhone || "",
         deliveryAddress: userAddress,
         doctorName: prescription.doctorName,
         doctorSpecialty: prescription.doctorSpecialty,
         diagnosis: prescription.diagnosis,
-        requestedTests: selectedTests.map(test => ({
+        requestedTests: selectedTests.map((test) => ({
           testId: test.testId,
           testName: test.testName,
           testDescription: test.testDescription,
-          status: 'pending',
+          status: "pending",
         })),
-        orderDate: new Date().toISOString().split('T')[0],
+        orderDate: new Date().toISOString().split("T")[0],
         orderTime: new Date().toLocaleTimeString(),
-        orderStatus: 'pending',
+        orderStatus: "pending",
         sampleCollected: false,
       };
 
       // Save to lab-test-orders node
       const response = await fetch(
-        'https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json',
+        "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json",
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify(labTestOrder),
-        }
+        },
       );
 
       if (response.ok) {
         const responseData = await response.json();
-        console.log('Lab test order saved:', responseData);
+        console.log("Lab test order saved:", responseData);
       } else {
-        Alert.alert('Error', 'Failed to save lab test order. Please try again.');
+        Alert.alert(
+          "Error",
+          "Failed to save lab test order. Please try again.",
+        );
       }
     } catch (error) {
-      console.error('Error saving lab test order:', error);
-      Alert.alert('Error', 'Failed to save lab test order. Please try again.');
+      console.error("Error saving lab test order:", error);
+      Alert.alert("Error", "Failed to save lab test order. Please try again.");
     }
   };
 
   const renderPrescriptionListItem = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.prescriptionCard}
       onPress={() => handleOpenPrescription(item)}
       activeOpacity={0.7}
@@ -485,7 +557,7 @@ const PrescriptionView = () => {
           <Text style={styles.dateText}>{item.date}</Text>
         </View>
       </View>
-      
+
       <View style={styles.cardFooter}>
         <Text style={styles.viewText}>Tap to view prescription</Text>
         <Ionicons name="chevron-forward" size={20} color="#4ECDC4" />
@@ -499,7 +571,7 @@ const PrescriptionView = () => {
         <Text style={styles.medicineName}>{medicine.name}</Text>
         <Text style={styles.medicineType}>{medicine.type}</Text>
       </View>
-      
+
       <View style={styles.medicineDetails}>
         <View style={styles.detailRow}>
           <MaterialIcons name="medical-services" size={16} color="#6B7280" />
@@ -515,8 +587,14 @@ const PrescriptionView = () => {
         </View>
         {medicine.instructions && (
           <View style={styles.detailRow}>
-            <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
-            <Text style={styles.detailText}>Instructions: {medicine.instructions}</Text>
+            <Ionicons
+              name="information-circle-outline"
+              size={16}
+              color="#6B7280"
+            />
+            <Text style={styles.detailText}>
+              Instructions: {medicine.instructions}
+            </Text>
           </View>
         )}
       </View>
@@ -536,12 +614,9 @@ const PrescriptionView = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#4ECDC4" />
-      
+
       {/* Header */}
-      <LinearGradient
-        colors={['#4ECDC4', '#44A08D']}
-        style={styles.header}
-      >
+      <LinearGradient colors={["#4ECDC4", "#44A08D"]} style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.headerButton}
@@ -551,7 +626,8 @@ const PrescriptionView = () => {
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>My Prescriptions</Text>
           <Text style={styles.headerSubtitle}>
-            {prescriptions.length} prescription{prescriptions.length > 1 ? 's' : ''}
+            {prescriptions.length} prescription
+            {prescriptions.length > 1 ? "s" : ""}
           </Text>
         </View>
         <View style={styles.headerButton} />
@@ -565,6 +641,13 @@ const PrescriptionView = () => {
         style={styles.prescriptionList}
         contentContainerStyle={styles.prescriptionListContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#4ECDC4"
+          />
+        }
       />
 
       {/* Full Prescription Modal */}
@@ -575,12 +658,9 @@ const PrescriptionView = () => {
       >
         <SafeAreaView style={styles.container}>
           <StatusBar barStyle="light-content" backgroundColor="#4ECDC4" />
-          
+
           {/* Modal Header */}
-          <LinearGradient
-            colors={['#4ECDC4', '#44A08D']}
-            style={styles.header}
-          >
+          <LinearGradient colors={["#4ECDC4", "#44A08D"]} style={styles.header}>
             <TouchableOpacity
               onPress={handleClosePrescription}
               style={styles.headerButton}
@@ -592,182 +672,321 @@ const PrescriptionView = () => {
           </LinearGradient>
 
           {selectedPrescription && (
-            <ScrollView style={styles.documentContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.documentContainer}
+              showsVerticalScrollIndicator={false}
+            >
               {/* Document Header */}
               <View style={styles.documentHeader}>
                 <View style={styles.documentTitleSection}>
                   <Text style={styles.documentTitle}>MEDICAL PRESCRIPTION</Text>
                   <View style={styles.dividerLine} />
                 </View>
-                
+
                 <View style={styles.prescriptionInfoRow}>
                   <View style={styles.prescriptionInfoLeft}>
-                    <Text style={styles.prescriptionLabel}>Prescription No:</Text>
-                    <Text style={styles.prescriptionValue}>{selectedPrescription.prescriptionNumber}</Text>
+                    <Text style={styles.prescriptionLabel}>
+                      Prescription No:
+                    </Text>
+                    <Text style={styles.prescriptionValue}>
+                      {selectedPrescription.prescriptionNumber}
+                    </Text>
                   </View>
                   <View style={styles.prescriptionInfoRight}>
                     <Text style={styles.prescriptionLabel}>Date:</Text>
-                    <Text style={styles.prescriptionValue}>{selectedPrescription.date}</Text>
+                    <Text style={styles.prescriptionValue}>
+                      {selectedPrescription.date}
+                    </Text>
                   </View>
                 </View>
               </View>
 
               {/* Document Body */}
               <View style={styles.documentBody}>
-                
                 {/* Diagnosis Section */}
                 <View style={styles.formSection}>
                   <Text style={styles.formSectionTitle}>DIAGNOSIS</Text>
                   <View style={styles.formField}>
-                    <Text style={styles.formFieldValue}>{selectedPrescription.diagnosis}</Text>
-                  </View>
-                </View>
-
-                {/* Symptoms Section */}
-                <View style={styles.formSection}>
-                  <Text style={styles.formSectionTitle}>SYMPTOMS</Text>
-                  <View style={styles.formField}>
                     <Text style={styles.formFieldValue}>
-                      {selectedPrescription.symptoms.join(', ')}
+                      {selectedPrescription.diagnosis}
                     </Text>
                   </View>
                 </View>
 
-                {/* Prescription Table */}
-                <View style={styles.formSection}>
-                  <Text style={styles.formSectionTitle}>PRESCRIBED MEDICINES</Text>
-                  
-                  {/* Table Header */}
-                  <View style={styles.tableHeader}>
-                    <Text style={[styles.tableHeaderText, { flex: 2 }]}>Medicine</Text>
-                    <Text style={[styles.tableHeaderText, { flex: 1 }]}>Dosage</Text>
-                    <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>Frequency</Text>
-                    <Text style={[styles.tableHeaderText, { flex: 1 }]}>Duration</Text>
-                  </View>
-
-                  {/* Table Rows */}
-                  {selectedPrescription.medicines.map((medicine, index) => (
-                    <View key={medicine.id} style={styles.tableRow}>
-                      <View style={[styles.tableCell, { flex: 2 }]}>
-                        <Text style={styles.tableCellText}>{medicine.name}</Text>
-                        <Text style={styles.tableCellSubText}>({medicine.type})</Text>
-                      </View>
-                      <View style={[styles.tableCell, { flex: 1 }]}>
-                        <Text style={styles.tableCellText}>{medicine.dosage}</Text>
-                      </View>
-                      <View style={[styles.tableCell, { flex: 1.5 }]}>
-                        <Text style={styles.tableCellText}>{medicine.frequency}</Text>
-                      </View>
-                      <View style={[styles.tableCell, { flex: 1 }]}>
-                        <Text style={styles.tableCellText}>{medicine.duration}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Instructions Section */}
-                <View style={styles.formSection}>
-                  <Text style={styles.formSectionTitle}>INSTRUCTIONS</Text>
-                  {selectedPrescription.medicines.map((medicine, index) => (
-                    medicine.instructions && (
-                      <View key={index} style={styles.instructionRow}>
-                        <Text style={styles.instructionNumber}>{index + 1}.</Text>
-                        <Text style={styles.instructionText}>
-                          {medicine.name}: {medicine.instructions}
+                {/* Symptoms Section */}
+                {selectedPrescription.symptoms &&
+                  selectedPrescription.symptoms.length > 0 && (
+                    <View style={styles.formSection}>
+                      <Text style={styles.formSectionTitle}>SYMPTOMS</Text>
+                      <View style={styles.formField}>
+                        <Text style={styles.formFieldValue}>
+                          {selectedPrescription.symptoms.join(", ")}
                         </Text>
                       </View>
-                    )
-                  ))}
-                </View>
+                    </View>
+                  )}
+
+                {/* Prescription Table */}
+                {selectedPrescription.medicines &&
+                  selectedPrescription.medicines.length > 0 && (
+                    <View style={styles.formSection}>
+                      <Text style={styles.formSectionTitle}>
+                        PRESCRIBED MEDICINES
+                      </Text>
+
+                      {/* Table Header */}
+                      <View style={styles.tableHeader}>
+                        <Text style={[styles.tableHeaderText, { flex: 2 }]}>
+                          Medicine
+                        </Text>
+                        <Text style={[styles.tableHeaderText, { flex: 1 }]}>
+                          Dosage
+                        </Text>
+                        <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>
+                          Frequency
+                        </Text>
+                        <Text style={[styles.tableHeaderText, { flex: 1 }]}>
+                          Duration
+                        </Text>
+                      </View>
+
+                      {/* Table Rows */}
+                      {selectedPrescription.medicines.map((medicine, index) => (
+                        <View key={medicine.id} style={styles.tableRow}>
+                          <View style={[styles.tableCell, { flex: 2 }]}>
+                            <Text style={styles.tableCellText}>
+                              {medicine.name}
+                            </Text>
+                            <Text style={styles.tableCellSubText}>
+                              ({medicine.type})
+                            </Text>
+                          </View>
+                          <View style={[styles.tableCell, { flex: 1 }]}>
+                            <Text style={styles.tableCellText}>
+                              {medicine.dosage}
+                            </Text>
+                          </View>
+                          <View style={[styles.tableCell, { flex: 1.5 }]}>
+                            <Text style={styles.tableCellText}>
+                              {medicine.frequency}
+                            </Text>
+                          </View>
+                          <View style={[styles.tableCell, { flex: 1 }]}>
+                            <Text style={styles.tableCellText}>
+                              {medicine.duration}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                {/* Instructions Section */}
+                {selectedPrescription.medicines &&
+                  selectedPrescription.medicines.length > 0 && (
+                    <View style={styles.formSection}>
+                      <Text style={styles.formSectionTitle}>INSTRUCTIONS</Text>
+                      {selectedPrescription.medicines.map(
+                        (medicine, index) =>
+                          medicine.instructions && (
+                            <View key={index} style={styles.instructionRow}>
+                              <Text style={styles.instructionNumber}>
+                                {index + 1}.
+                              </Text>
+                              <Text style={styles.instructionText}>
+                                {medicine.name}: {medicine.instructions}
+                              </Text>
+                            </View>
+                          ),
+                      )}
+                    </View>
+                  )}
 
                 {/* Doctor's Advice Section */}
-                <View style={styles.formSection}>
-                  <Text style={styles.formSectionTitle}>DOCTOR'S ADVICE</Text>
-                  {selectedPrescription.advice.map((advice, index) => (
-                    <View key={index} style={styles.adviceRow}>
-                      <Text style={styles.adviceNumber}>• </Text>
-                      <Text style={styles.adviceText}>{advice}</Text>
+                {selectedPrescription.advice &&
+                  selectedPrescription.advice.length > 0 && (
+                    <View style={styles.formSection}>
+                      <Text style={styles.formSectionTitle}>
+                        DOCTOR'S ADVICE
+                      </Text>
+                      {selectedPrescription.advice.map((advice, index) => (
+                        <View key={index} style={styles.adviceRow}>
+                          <Text style={styles.adviceNumber}>• </Text>
+                          <Text style={styles.adviceText}>{advice}</Text>
+                        </View>
+                      ))}
                     </View>
-                  ))}
-                </View>
+                  )}
 
                 {/* Next Visit Section */}
                 <View style={styles.formSection}>
                   <Text style={styles.formSectionTitle}>NEXT VISIT</Text>
                   <View style={styles.formField}>
                     <Text style={styles.formFieldLabel}>Scheduled Date:</Text>
-                    <Text style={styles.formFieldValue}>{selectedPrescription.nextVisit}</Text>
+                    <Text style={styles.formFieldValue}>
+                      {selectedPrescription.nextVisit}
+                    </Text>
                   </View>
                 </View>
 
                 {/* Lab Tests Section */}
-                {selectedPrescription.requestedLabTests && selectedPrescription.requestedLabTests.length > 0 && (
-                  <View style={styles.formSection}>
-                    <View style={styles.labTestSectionHeader}>
-                      <MaterialIcons name="science" size={22} color="#4ECDC4" />
-                      <Text style={styles.formSectionTitle}>REQUESTED LAB TESTS</Text>
-                    </View>
-                    
-                    {selectedPrescription.requestedLabTests.map((test, index) => {
-                      const hasReport = getLabReportForPrescription(selectedPrescription.id) ? true : false;
-                      const displayStatus = hasReport ? 'completed' : test.status;
-                      
-                      return (
-                        <View key={index} style={styles.labTestCard}>
-                          <View style={styles.labTestCardHeader}>
-                            <View style={styles.labTestNumber}>
-                              <Text style={styles.labTestNumberText}>{index + 1}</Text>
-                            </View>
-                            <View style={styles.labTestInfo}>
-                              <Text style={styles.labTestName}>{test.testName}</Text>
-                              <Text style={styles.labTestDescription}>{test.testDescription}</Text>
-                            </View>
-                            <View style={[styles.labTestStatus, { backgroundColor: displayStatus === 'pending' ? '#fef3c7' : '#d1fae5' }]}>
-                              <Text style={[styles.labTestStatusText, { color: displayStatus === 'pending' ? '#b45309' : '#047857' }]}>
-                                {displayStatus === 'pending' ? 'Pending' : 'Completed'}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.labTestDateInfo}>
-                            <Ionicons name="calendar" size={14} color="#999" />
-                            <Text style={styles.labTestDate}>Requested: {test.requestedDate}</Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-
-                    {/* Lab Report Section */}
-                    {getLabReportForPrescription(selectedPrescription.id) && (
-                      <View style={[styles.formSection, { marginTop: 20, backgroundColor: '#e8f5e9', borderLeftWidth: 4, borderLeftColor: '#4CAF50' }]}>
-                        <View style={styles.reportHeader}>
-                          <Ionicons name="document" size={24} color="#4CAF50" />
-                          <Text style={[styles.formSectionTitle, { color: '#4CAF50', marginLeft: 10 }]}>LAB REPORT</Text>
-                        </View>
-                        <View style={styles.reportInfo}>
-                          <Text style={styles.reportInfoText}>
-                            ✓ Report uploaded on {getLabReportForPrescription(selectedPrescription.id).reportUploadedDate}
-                          </Text>
-                          <Text style={styles.reportInfoText}>
-                            Time: {getLabReportForPrescription(selectedPrescription.id).reportUploadedTime}
-                          </Text>
-                        </View>
-                        <TouchableOpacity 
-                          style={styles.viewReportButton}
-                          onPress={() => handleViewReport(getLabReportForPrescription(selectedPrescription.id))}
-                        >
-                          <Ionicons name="image" size={18} color="white" />
-                          <Text style={styles.viewReportButtonText}>View Report Image</Text>
-                        </TouchableOpacity>
+                {selectedPrescription.requestedLabTests &&
+                  selectedPrescription.requestedLabTests.length > 0 && (
+                    <View style={styles.formSection}>
+                      <View style={styles.labTestSectionHeader}>
+                        <MaterialIcons
+                          name="science"
+                          size={22}
+                          color="#4ECDC4"
+                        />
+                        <Text style={styles.formSectionTitle}>
+                          REQUESTED LAB TESTS
+                        </Text>
                       </View>
-                    )}
-                  </View>
-                )}
+
+                      {selectedPrescription.requestedLabTests.map(
+                        (test, index) => {
+                          const hasReport = getLabReportForPrescription(
+                            selectedPrescription.id,
+                          )
+                            ? true
+                            : false;
+                          const displayStatus = hasReport
+                            ? "completed"
+                            : test.status;
+
+                          return (
+                            <View key={index} style={styles.labTestCard}>
+                              <View style={styles.labTestCardHeader}>
+                                <View style={styles.labTestNumber}>
+                                  <Text style={styles.labTestNumberText}>
+                                    {index + 1}
+                                  </Text>
+                                </View>
+                                <View style={styles.labTestInfo}>
+                                  <Text style={styles.labTestName}>
+                                    {test.testName}
+                                  </Text>
+                                  <Text style={styles.labTestDescription}>
+                                    {test.testDescription}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.labTestStatus,
+                                    {
+                                      backgroundColor:
+                                        displayStatus === "pending"
+                                          ? "#fef3c7"
+                                          : "#d1fae5",
+                                    },
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.labTestStatusText,
+                                      {
+                                        color:
+                                          displayStatus === "pending"
+                                            ? "#b45309"
+                                            : "#047857",
+                                      },
+                                    ]}
+                                  >
+                                    {displayStatus === "pending"
+                                      ? "Pending"
+                                      : "Completed"}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.labTestDateInfo}>
+                                <Ionicons
+                                  name="calendar"
+                                  size={14}
+                                  color="#999"
+                                />
+                                <Text style={styles.labTestDate}>
+                                  Requested: {test.requestedDate}
+                                </Text>
+                              </View>
+                            </View>
+                          );
+                        },
+                      )}
+
+                      {/* Lab Report Section */}
+                      {getLabReportForPrescription(selectedPrescription.id) && (
+                        <View
+                          style={[
+                            styles.formSection,
+                            {
+                              marginTop: 20,
+                              backgroundColor: "#e8f5e9",
+                              borderLeftWidth: 4,
+                              borderLeftColor: "#4CAF50",
+                            },
+                          ]}
+                        >
+                          <View style={styles.reportHeader}>
+                            <Ionicons
+                              name="document"
+                              size={24}
+                              color="#4CAF50"
+                            />
+                            <Text
+                              style={[
+                                styles.formSectionTitle,
+                                { color: "#4CAF50", marginLeft: 10 },
+                              ]}
+                            >
+                              LAB REPORT
+                            </Text>
+                          </View>
+                          <View style={styles.reportInfo}>
+                            <Text style={styles.reportInfoText}>
+                              ✓ Report uploaded on{" "}
+                              {
+                                getLabReportForPrescription(
+                                  selectedPrescription.id,
+                                ).reportUploadedDate
+                              }
+                            </Text>
+                            <Text style={styles.reportInfoText}>
+                              Time:{" "}
+                              {
+                                getLabReportForPrescription(
+                                  selectedPrescription.id,
+                                ).reportUploadedTime
+                              }
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.viewReportButton}
+                            onPress={() =>
+                              handleViewReport(
+                                getLabReportForPrescription(
+                                  selectedPrescription.id,
+                                ),
+                              )
+                            }
+                          >
+                            <Ionicons name="image" size={18} color="white" />
+                            <Text style={styles.viewReportButtonText}>
+                              View Report Image
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  )}
 
                 {/* Document Footer */}
                 <View style={styles.documentFooter}>
                   <View style={styles.signatureSection}>
                     <View style={styles.signatureLine} />
-                    <Text style={styles.signatureLabel}>Doctor's Signature</Text>
+                    <Text style={styles.signatureLabel}>
+                      Doctor's Signature
+                    </Text>
                   </View>
                   <View style={styles.stampSection}>
                     <View style={styles.stampBox}>
@@ -775,18 +994,21 @@ const PrescriptionView = () => {
                     </View>
                   </View>
                 </View>
-
               </View>
-              
+
               <View style={styles.documentPadding} />
-              
+
               {/* Order Medicine Button */}
               <View style={styles.orderButtonContainer}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.orderMedicineButton}
                   onPress={() => handleOrderMedicine(selectedPrescription)}
                 >
-                  <MaterialIcons name="local-pharmacy" size={20} color="white" />
+                  <MaterialIcons
+                    name="local-pharmacy"
+                    size={20}
+                    color="white"
+                  />
                   <Text style={styles.orderButtonText}>Order Medicine</Text>
                 </TouchableOpacity>
               </View>
@@ -811,7 +1033,10 @@ const PrescriptionView = () => {
               </Text>
             </View>
 
-            <ScrollView style={styles.labTestsScrollContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.labTestsScrollContainer}
+              showsVerticalScrollIndicator={false}
+            >
               {selectedLabTestsToOrder.length > 0 && (
                 <View style={styles.labTestsList}>
                   {selectedLabTestsToOrder.map((test, index) => (
@@ -827,15 +1052,23 @@ const PrescriptionView = () => {
                       <View style={styles.labTestSelectionHeader}>
                         <View style={styles.labTestCheckbox}>
                           {test.selected && (
-                            <Ionicons name="checkmark-circle" size={24} color="#4ECDC4" />
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={24}
+                              color="#4ECDC4"
+                            />
                           )}
                           {!test.selected && (
                             <View style={styles.labTestUncheckedBox} />
                           )}
                         </View>
                         <View style={styles.labTestSelectionInfo}>
-                          <Text style={styles.labTestSelectionName}>{test.testName}</Text>
-                          <Text style={styles.labTestSelectionDescription}>{test.testDescription}</Text>
+                          <Text style={styles.labTestSelectionName}>
+                            {test.testName}
+                          </Text>
+                          <Text style={styles.labTestSelectionDescription}>
+                            {test.testDescription}
+                          </Text>
                         </View>
                       </View>
                     </TouchableOpacity>
@@ -849,7 +1082,13 @@ const PrescriptionView = () => {
                 style={[styles.labOrderButton, styles.cancelButton]}
                 onPress={() => {
                   setShowLabOrderModal(false);
-                  showConfirmAndOrder(medicineOrderData.prescription, medicineOrderData.userEmail, medicineOrderData.userName, medicineOrderData.userAddress, null);
+                  showConfirmAndOrder(
+                    medicineOrderData.prescription,
+                    medicineOrderData.userEmail,
+                    medicineOrderData.userName,
+                    medicineOrderData.userAddress,
+                    null,
+                  );
                 }}
               >
                 <Text style={styles.cancelButtonText}>Medicine Only</Text>
@@ -858,9 +1097,11 @@ const PrescriptionView = () => {
               <TouchableOpacity
                 style={[styles.labOrderButton, styles.labOnlyButton]}
                 onPress={() => {
-                  const selected = selectedLabTestsToOrder.filter(t => t.selected);
+                  const selected = selectedLabTestsToOrder.filter(
+                    (t) => t.selected,
+                  );
                   if (selected.length === 0) {
-                    Alert.alert('Error', 'Please select at least one lab test');
+                    Alert.alert("Error", "Please select at least one lab test");
                     return;
                   }
                   setShowLabConfirmModal(true);
@@ -872,9 +1113,11 @@ const PrescriptionView = () => {
               <TouchableOpacity
                 style={[styles.labOrderButton, styles.bothButton]}
                 onPress={() => {
-                  const selected = selectedLabTestsToOrder.filter(t => t.selected);
+                  const selected = selectedLabTestsToOrder.filter(
+                    (t) => t.selected,
+                  );
                   if (selected.length === 0) {
-                    Alert.alert('Error', 'Please select at least one lab test');
+                    Alert.alert("Error", "Please select at least one lab test");
                     return;
                   }
                   setShowLabConfirmModal(true);
@@ -897,26 +1140,38 @@ const PrescriptionView = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalContainer}>
             <View style={styles.confirmModalContent}>
-              <Ionicons name="home" size={60} color="#4ECDC4" style={styles.confirmIcon} />
-              
+              <Ionicons
+                name="home"
+                size={60}
+                color="#4ECDC4"
+                style={styles.confirmIcon}
+              />
+
               <Text style={styles.confirmTitle}>Lab Sample Collection</Text>
-              
+
               <Text style={styles.confirmMessage}>
-                Our pharmacy team will visit your home to collect samples for the requested lab tests at your convenience.
+                Our pharmacy team will visit your home to collect samples for
+                the requested lab tests at your convenience.
               </Text>
 
               <View style={styles.confirmDetails}>
                 <View style={styles.confirmDetailRow}>
                   <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                  <Text style={styles.confirmDetailText}>Home sample collection</Text>
+                  <Text style={styles.confirmDetailText}>
+                    Home sample collection
+                  </Text>
                 </View>
                 <View style={styles.confirmDetailRow}>
                   <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                  <Text style={styles.confirmDetailText}>Hygienic & hassle-free</Text>
+                  <Text style={styles.confirmDetailText}>
+                    Hygienic & hassle-free
+                  </Text>
                 </View>
                 <View style={styles.confirmDetailRow}>
                   <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                  <Text style={styles.confirmDetailText}>Quick results & updates</Text>
+                  <Text style={styles.confirmDetailText}>
+                    Quick results & updates
+                  </Text>
                 </View>
               </View>
             </View>
@@ -927,7 +1182,13 @@ const PrescriptionView = () => {
                 onPress={() => {
                   setShowLabConfirmModal(false);
                   setShowLabOrderModal(false);
-                  showConfirmAndOrder(medicineOrderData.prescription, medicineOrderData.userEmail, medicineOrderData.userName, medicineOrderData.userAddress, null);
+                  showConfirmAndOrder(
+                    medicineOrderData.prescription,
+                    medicineOrderData.userEmail,
+                    medicineOrderData.userName,
+                    medicineOrderData.userAddress,
+                    null,
+                  );
                 }}
               >
                 <Text style={styles.declineButtonText}>Skip Tests</Text>
@@ -936,8 +1197,16 @@ const PrescriptionView = () => {
               <TouchableOpacity
                 style={[styles.confirmButton, styles.acceptButton]}
                 onPress={() => {
-                  const selected = selectedLabTestsToOrder.filter(t => t.selected);
-                  showConfirmAndOrder(medicineOrderData.prescription, medicineOrderData.userEmail, medicineOrderData.userName, medicineOrderData.userAddress, selected);
+                  const selected = selectedLabTestsToOrder.filter(
+                    (t) => t.selected,
+                  );
+                  showConfirmAndOrder(
+                    medicineOrderData.prescription,
+                    medicineOrderData.userEmail,
+                    medicineOrderData.userName,
+                    medicineOrderData.userAddress,
+                    selected,
+                  );
                 }}
               >
                 <Text style={styles.acceptButtonText}>Order Tests</Text>
@@ -969,13 +1238,23 @@ const PrescriptionView = () => {
                 {/* Report Info */}
                 <View style={styles.reportDetailSection}>
                   <Text style={styles.reportDetailLabel}>Test Report</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.testsList}</Text>
-                  
-                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>Uploaded Date</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.reportUploadedDate}</Text>
-                  
-                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>Uploaded Time</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.reportUploadedTime}</Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.testsList}
+                  </Text>
+
+                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>
+                    Uploaded Date
+                  </Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.reportUploadedDate}
+                  </Text>
+
+                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>
+                    Uploaded Time
+                  </Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.reportUploadedTime}
+                  </Text>
                 </View>
 
                 {/* Report Image */}
@@ -983,7 +1262,9 @@ const PrescriptionView = () => {
                   <View style={styles.reportImageContainer}>
                     <Text style={styles.reportImageLabel}>Report Image</Text>
                     <Image
-                      source={{ uri: `data:image/jpeg;base64,${selectedReport.reportImage}` }}
+                      source={{
+                        uri: `data:image/jpeg;base64,${selectedReport.reportImage}`,
+                      }}
                       style={styles.reportImage}
                       resizeMode="contain"
                     />
@@ -992,9 +1273,18 @@ const PrescriptionView = () => {
 
                 {/* Doctor Info */}
                 <View style={styles.reportDetailSection}>
-                  <Text style={styles.reportDetailLabel}>Doctor Information</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.doctorName}</Text>
-                  <Text style={[styles.reportDetailValue, { fontSize: 12, color: '#6B7280', marginTop: 4 }]}>
+                  <Text style={styles.reportDetailLabel}>
+                    Doctor Information
+                  </Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.doctorName}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.reportDetailValue,
+                      { fontSize: 12, color: "#6B7280", marginTop: 4 },
+                    ]}
+                  >
                     {selectedReport.doctorSpecialty}
                   </Text>
                 </View>
@@ -1002,7 +1292,9 @@ const PrescriptionView = () => {
                 {/* Diagnosis */}
                 <View style={styles.reportDetailSection}>
                   <Text style={styles.reportDetailLabel}>Diagnosis</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.diagnosis}</Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.diagnosis}
+                  </Text>
                 </View>
               </ScrollView>
             )}
@@ -1016,28 +1308,28 @@ const PrescriptionView = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight + 20,
+    paddingTop: Platform.OS === "ios" ? 50 : StatusBar.currentHeight + 20,
     paddingBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   headerContent: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   headerSubtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: "rgba(255, 255, 255, 0.8)",
     marginTop: 4,
   },
   headerButton: {
@@ -1046,38 +1338,38 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: "#6B7280",
   },
   prescriptionList: {
     flex: 1,
-    backgroundColor: '#F7FAFC',
+    backgroundColor: "#F7FAFC",
   },
   prescriptionListContent: {
     padding: 16,
     paddingBottom: 30,
   },
   prescriptionCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
     borderLeftWidth: 4,
-    borderLeftColor: '#4ECDC4',
+    borderLeftColor: "#4ECDC4",
   },
   cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 12,
   },
   doctorInfo: {
@@ -1085,86 +1377,82 @@ const styles = StyleSheet.create({
   },
   doctorName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2D3748',
+    fontWeight: "bold",
+    color: "#2D3748",
     marginBottom: 4,
   },
   specialty: {
     fontSize: 14,
-    color: '#4ECDC4',
-    fontWeight: '500',
+    color: "#4ECDC4",
+    fontWeight: "500",
   },
   dateContainer: {
-    backgroundColor: '#F0F8F8',
+    backgroundColor: "#F0F8F8",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   dateText: {
     fontSize: 13,
-    color: '#2D3748',
-    fontWeight: '600',
+    color: "#2D3748",
+    fontWeight: "600",
   },
   cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: "#E2E8F0",
   },
   viewText: {
     fontSize: 14,
-    color: '#6B7280',
-    fontStyle: 'italic',
+    color: "#6B7280",
+    fontStyle: "italic",
   },
-
-
-
-
 
   doctorName: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#4ECDC4',
+    fontWeight: "bold",
+    color: "#4ECDC4",
     marginBottom: 4,
   },
   doctorSpecialty: {
     fontSize: 14,
-    color: '#6B7280',
+    color: "#6B7280",
     marginBottom: 2,
   },
   hospitalName: {
     fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
+    color: "#374151",
+    fontWeight: "500",
   },
   diagnosisSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: "#F3F4F6",
   },
   diagnosisLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
+    fontWeight: "600",
+    color: "#374151",
     marginRight: 8,
   },
   diagnosisText: {
     fontSize: 14,
-    color: '#1F2937',
+    color: "#1F2937",
     flex: 1,
   },
   medicineCount: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   medicineCountText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: "#6B7280",
     marginLeft: 6,
   },
   modalContent: {
@@ -1172,11 +1460,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   prescriptionHeader: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 20,
     borderRadius: 12,
     marginVertical: 20,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -1184,81 +1472,81 @@ const styles = StyleSheet.create({
   },
   modalPrescriptionNumber: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: "bold",
+    color: "#1F2937",
     marginBottom: 5,
   },
   modalPrescriptionDate: {
     fontSize: 14,
-    color: '#6B7280',
+    color: "#6B7280",
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: "bold",
+    color: "#1F2937",
     marginBottom: 12,
   },
   infoCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 20,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
   },
   infoLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: "#6B7280",
     marginLeft: 12,
     minWidth: 80,
   },
   infoValue: {
     fontSize: 14,
-    color: '#1F2937',
-    fontWeight: '500',
+    color: "#1F2937",
+    fontWeight: "500",
     flex: 1,
     marginLeft: 8,
   },
   diagnosisTextFull: {
     fontSize: 16,
-    color: '#1F2937',
-    fontWeight: '600',
+    color: "#1F2937",
+    fontWeight: "600",
     marginBottom: 16,
   },
   symptomsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   symptomTag: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: "#FEF3C7",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#FCD34D',
+    borderColor: "#FCD34D",
   },
   symptomText: {
     fontSize: 12,
-    color: '#92400E',
-    fontWeight: '500',
+    color: "#92400E",
+    fontWeight: "500",
   },
   medicineCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -1269,39 +1557,39 @@ const styles = StyleSheet.create({
   },
   medicineName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: "bold",
+    color: "#1F2937",
     marginBottom: 4,
   },
   medicineType: {
     fontSize: 12,
-    color: '#6B7280',
-    backgroundColor: '#F3F4F6',
+    color: "#6B7280",
+    backgroundColor: "#F3F4F6",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   medicineDetails: {
     gap: 8,
   },
   detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   detailText: {
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
     marginLeft: 8,
   },
   adviceItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginBottom: 8,
   },
   adviceText: {
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
     marginLeft: 8,
     flex: 1,
   },
@@ -1311,52 +1599,52 @@ const styles = StyleSheet.create({
   // Document/Form Styles
   documentContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   documentHeader: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: "#E5E7EB",
   },
   documentTitleSection: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 12,
   },
   documentTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: "bold",
+    color: "#1F2937",
     letterSpacing: 1,
   },
   dividerLine: {
     width: 80,
     height: 2,
-    backgroundColor: '#4ECDC4',
+    backgroundColor: "#4ECDC4",
     marginTop: 4,
   },
   prescriptionInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   prescriptionInfoLeft: {
     flex: 1,
   },
   prescriptionInfoRight: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   prescriptionLabel: {
     fontSize: 10,
-    color: '#6B7280',
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    color: "#6B7280",
+    fontWeight: "600",
+    textTransform: "uppercase",
   },
   prescriptionValue: {
     fontSize: 13,
-    color: '#1F2937',
-    fontWeight: 'bold',
+    color: "#1F2937",
+    fontWeight: "bold",
     marginTop: 2,
   },
   documentBody: {
@@ -1369,149 +1657,149 @@ const styles = StyleSheet.create({
   },
   formSectionTitle: {
     fontSize: 11,
-    fontWeight: 'bold',
-    color: '#374151',
-    textTransform: 'uppercase',
+    fontWeight: "bold",
+    color: "#374151",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 8,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: "#E5E7EB",
   },
   formField: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: "#F9FAFB",
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
   },
   formFieldLabel: {
     fontSize: 10,
-    color: '#6B7280',
-    fontWeight: '600',
+    color: "#6B7280",
+    fontWeight: "600",
     marginBottom: 2,
   },
   formFieldValue: {
     fontSize: 13,
-    color: '#1F2937',
+    color: "#1F2937",
     lineHeight: 18,
   },
   tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
+    flexDirection: "row",
+    backgroundColor: "#F3F4F6",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderTopWidth: 2,
-    borderTopColor: '#4ECDC4',
+    borderTopColor: "#4ECDC4",
     borderBottomWidth: 1,
-    borderBottomColor: '#D1D5DB',
+    borderBottomColor: "#D1D5DB",
   },
   tableHeaderText: {
     fontSize: 10,
-    fontWeight: 'bold',
-    color: '#374151',
-    textTransform: 'uppercase',
+    fontWeight: "bold",
+    color: "#374151",
+    textTransform: "uppercase",
   },
   tableRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    backgroundColor: '#FFFFFF',
+    borderBottomColor: "#F3F4F6",
+    backgroundColor: "#FFFFFF",
   },
   tableCell: {
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   tableCellText: {
     fontSize: 12,
-    color: '#1F2937',
-    fontWeight: '500',
+    color: "#1F2937",
+    fontWeight: "500",
   },
   tableCellSubText: {
     fontSize: 10,
-    color: '#6B7280',
-    fontStyle: 'italic',
+    color: "#6B7280",
+    fontStyle: "italic",
     marginTop: 1,
   },
   instructionRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 6,
     paddingHorizontal: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: "#F9FAFB",
     marginBottom: 6,
     borderRadius: 4,
     borderLeftWidth: 2,
-    borderLeftColor: '#4ECDC4',
+    borderLeftColor: "#4ECDC4",
   },
   instructionNumber: {
     fontSize: 12,
-    fontWeight: 'bold',
-    color: '#4ECDC4',
+    fontWeight: "bold",
+    color: "#4ECDC4",
     marginRight: 8,
     minWidth: 16,
   },
   instructionText: {
     fontSize: 12,
-    color: '#374151',
+    color: "#374151",
     flex: 1,
     lineHeight: 16,
   },
   adviceRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingVertical: 4,
     paddingHorizontal: 12,
   },
   adviceNumber: {
     fontSize: 13,
-    fontWeight: 'bold',
-    color: '#22C55E',
+    fontWeight: "bold",
+    color: "#22C55E",
     marginRight: 6,
     minWidth: 16,
   },
   documentFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
     marginTop: 20,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: "#E5E7EB",
   },
   signatureSection: {
     flex: 1,
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   signatureLine: {
     width: 120,
     height: 1,
-    backgroundColor: '#374151',
+    backgroundColor: "#374151",
     marginBottom: 6,
   },
   signatureLabel: {
     fontSize: 10,
-    color: '#6B7280',
-    fontWeight: '500',
+    color: "#6B7280",
+    fontWeight: "500",
   },
   stampSection: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   stampBox: {
     width: 100,
     height: 60,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    borderColor: "#D1D5DB",
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
   },
   stampText: {
     fontSize: 8,
-    color: '#9CA3AF',
-    fontWeight: 'bold',
-    textAlign: 'center',
+    color: "#9CA3AF",
+    fontWeight: "bold",
+    textAlign: "center",
   },
   documentPadding: {
     height: 20,
@@ -1519,48 +1807,48 @@ const styles = StyleSheet.create({
   orderButtonContainer: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: "#F8FAFC",
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: "#E2E8F0",
   },
   orderMedicineButton: {
-    backgroundColor: '#4ECDC4',
-    flexDirection: 'row',
+    backgroundColor: "#4ECDC4",
+    flexDirection: "row",
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
   orderButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginLeft: 10,
   },
   // Lab Test Styles
   labTestSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     marginBottom: 16,
   },
   labTestCard: {
-    backgroundColor: '#f0fffe',
+    backgroundColor: "#f0fffe",
     borderLeftWidth: 4,
-    borderLeftColor: '#4ECDC4',
+    borderLeftColor: "#4ECDC4",
     padding: 14,
     borderRadius: 10,
     marginBottom: 12,
   },
   labTestCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     marginBottom: 10,
   },
@@ -1568,13 +1856,13 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#4ECDC4',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#4ECDC4",
+    justifyContent: "center",
+    alignItems: "center",
   },
   labTestNumberText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: "white",
+    fontWeight: "bold",
     fontSize: 14,
   },
   labTestInfo: {
@@ -1582,13 +1870,13 @@ const styles = StyleSheet.create({
   },
   labTestName: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: "600",
+    color: "#1F2937",
     marginBottom: 3,
   },
   labTestDescription: {
     fontSize: 12,
-    color: '#6B7280',
+    color: "#6B7280",
     lineHeight: 16,
   },
   labTestStatus: {
@@ -1598,49 +1886,49 @@ const styles = StyleSheet.create({
   },
   labTestStatusText: {
     fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
+    fontWeight: "600",
+    textTransform: "capitalize",
   },
   labTestDateInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingLeft: 44,
   },
   labTestDate: {
     fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
+    color: "#999",
+    fontStyle: "italic",
   },
   // Lab Order Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "flex-end",
   },
   labOrderModalContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 20,
-    maxHeight: '90%',
+    maxHeight: "90%",
   },
   labOrderModalHeader: {
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: "#E5E7EB",
   },
   labOrderModalTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
+    fontWeight: "700",
+    color: "#1F2937",
     marginBottom: 4,
   },
   labOrderModalSubtitle: {
     fontSize: 13,
-    color: '#6B7280',
+    color: "#6B7280",
   },
   labTestsScrollContainer: {
     maxHeight: 350,
@@ -1651,99 +1939,99 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   labTestSelectionCard: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: "#f9fafb",
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
     borderRadius: 12,
     padding: 14,
   },
   labTestSelectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 12,
   },
   labTestCheckbox: {
     width: 24,
     height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 2,
   },
   labTestUncheckedBox: {
     width: 24,
     height: 24,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
+    borderColor: "#D1D5DB",
     borderRadius: 12,
-    backgroundColor: 'white',
+    backgroundColor: "white",
   },
   labTestSelectionInfo: {
     flex: 1,
   },
   labTestSelectionName: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: "600",
+    color: "#1F2937",
     marginBottom: 3,
   },
   labTestSelectionDescription: {
     fontSize: 12,
-    color: '#6B7280',
+    color: "#6B7280",
     lineHeight: 16,
   },
   labOrderModalButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: "#E5E7EB",
   },
   labOrderButton: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   cancelButton: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: "#D1D5DB",
   },
   cancelButtonText: {
-    color: '#374151',
+    color: "#374151",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   labOnlyButton: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: "#FEF3C7",
   },
   labOnlyButtonText: {
-    color: '#92400E',
+    color: "#92400E",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   bothButton: {
-    backgroundColor: '#4ECDC4',
+    backgroundColor: "#4ECDC4",
   },
   bothButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   // Confirmation Modal Styles
   confirmModalContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 32,
     paddingBottom: 24,
-    maxHeight: '80%',
+    maxHeight: "80%",
   },
   confirmModalContent: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 24,
   },
   confirmIcon: {
@@ -1751,39 +2039,39 @@ const styles = StyleSheet.create({
   },
   confirmTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#1F2937',
+    fontWeight: "700",
+    color: "#1F2937",
     marginBottom: 12,
-    textAlign: 'center',
+    textAlign: "center",
   },
   confirmMessage: {
     fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
+    color: "#6B7280",
+    textAlign: "center",
     lineHeight: 20,
     marginBottom: 20,
   },
   confirmDetails: {
     gap: 12,
-    backgroundColor: '#f0fffe',
+    backgroundColor: "#f0fffe",
     padding: 16,
     borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#4ECDC4',
+    borderLeftColor: "#4ECDC4",
   },
   confirmDetailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
   },
   confirmDetailText: {
     fontSize: 13,
-    color: '#374151',
-    fontWeight: '500',
+    color: "#374151",
+    fontWeight: "500",
     flex: 1,
   },
   confirmButtonsSection: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     marginTop: 24,
   },
@@ -1791,31 +2079,31 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   declineButton: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: "#D1D5DB",
   },
   declineButtonText: {
-    color: '#374151',
+    color: "#374151",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   acceptButton: {
-    backgroundColor: '#4ECDC4',
+    backgroundColor: "#4ECDC4",
   },
   acceptButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   // Report View Modal Styles
   reportHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
   },
   reportInfo: {
@@ -1824,99 +2112,99 @@ const styles = StyleSheet.create({
   },
   reportInfoText: {
     fontSize: 13,
-    color: '#2E7D32',
-    fontWeight: '500',
+    color: "#2E7D32",
+    fontWeight: "500",
     marginBottom: 6,
   },
   viewReportButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: "#4CAF50",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 12,
     gap: 8,
   },
   viewReportButtonText: {
-    color: 'white',
-    fontWeight: '600',
+    color: "white",
+    fontWeight: "600",
     fontSize: 14,
   },
   reportModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   reportModalContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 16,
-    maxHeight: '90%',
-    width: '100%',
-    overflow: 'hidden',
+    maxHeight: "90%",
+    width: "100%",
+    overflow: "hidden",
   },
   reportModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
+    borderBottomColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
   },
   reportModalTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#1F2937',
+    fontWeight: "700",
+    color: "#1F2937",
   },
   reportModalContent: {
     padding: 16,
   },
   reportDetailSection: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: "#F3F4F6",
     borderRadius: 12,
     padding: 14,
     marginBottom: 16,
   },
   reportDetailLabel: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    color: "#6B7280",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 6,
   },
   reportDetailValue: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1F2937',
+    fontWeight: "600",
+    color: "#1F2937",
     lineHeight: 22,
   },
   reportImageContainer: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: "#F9FAFB",
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: "#E5E7EB",
   },
   reportImageLabel: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    color: "#6B7280",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 10,
   },
   reportImage: {
-    width: '100%',
+    width: "100%",
     height: 400,
     borderRadius: 8,
-    backgroundColor: 'white',
+    backgroundColor: "white",
   },
 });
 

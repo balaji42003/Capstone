@@ -1,26 +1,25 @@
 import {
-  FontAwesome5,
-  Ionicons,
-  MaterialCommunityIcons,
-  MaterialIcons,
+    FontAwesome5,
+    Ionicons,
+    MaterialCommunityIcons
 } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { API_ENDPOINTS } from "../config/api.config";
 
@@ -70,11 +69,12 @@ const DoctorDashboard = () => {
   const [todayAppointments, setTodayAppointments] = useState(0);
   const [uniquePatientsToday, setUniquePatientsToday] = useState(0);
   const [todayRevenue, setTodayRevenue] = useState(0);
-  
+
   // Prescription detail modal states
   const [showPrescriptionDetail, setShowPrescriptionDetail] = useState(false);
-  const [selectedPrescriptionDetail, setSelectedPrescriptionDetail] = useState(null);
-  
+  const [selectedPrescriptionDetail, setSelectedPrescriptionDetail] =
+    useState(null);
+
   // Lab test order states
   const [labTestOrders, setLabTestOrders] = useState([]);
   const [reportViewVisible, setReportViewVisible] = useState(false);
@@ -237,14 +237,40 @@ const DoctorDashboard = () => {
         cleanupExpiredAppointments();
       }, 2000);
     }
-  }, [doctorId, loadAppointmentsData, loadPrescriptionsData, loadLabTestOrdersData]);
+  }, [
+    doctorId,
+    loadAppointmentsData,
+    loadPrescriptionsData,
+    loadLabTestOrdersData,
+  ]);
 
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => {
+    try {
+      // Reload all data based on active tab
+      if (activeTab === "Appointments" || activeTab === "Dashboard") {
+        await loadAppointmentsData();
+      }
+      if (activeTab === "Prescriptions" || activeTab === "Dashboard") {
+        await loadPrescriptionsData();
+      }
+      if (activeTab === "Patients" || activeTab === "Dashboard") {
+        await loadAppointmentsData(); // Needed to calculate unique patients
+      }
+      if (activeTab === "Dashboard") {
+        await loadLabTestOrdersData();
+      }
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    } finally {
       setRefreshing(false);
-    }, 1000);
-  }, []);
+    }
+  }, [
+    activeTab,
+    loadAppointmentsData,
+    loadPrescriptionsData,
+    loadLabTestOrdersData,
+  ]);
 
   const logout = async () => {
     try {
@@ -576,7 +602,10 @@ const DoctorDashboard = () => {
           doctorAppointments.length,
           "appointments for doctor",
         );
-        console.log("RAW DOCTOR APPOINTMENTS DATA:", JSON.stringify(doctorAppointments, null, 2));
+        console.log(
+          "RAW DOCTOR APPOINTMENTS DATA:",
+          JSON.stringify(doctorAppointments, null, 2),
+        );
         setAppointments(doctorAppointments);
 
         // Calculate stats
@@ -611,38 +640,49 @@ const DoctorDashboard = () => {
 
         // Calculate today's stats
         if (doctorAppointments.length > 0) {
-          const todayDate = new Date().toISOString().split('T')[0];
+          const todayDate = new Date().toISOString().split("T")[0];
           console.log("===== TODAY'S STATS CALCULATION =====");
           console.log("Today's date:", todayDate);
           console.log("Total appointments:", doctorAppointments.length);
           console.log("Consultation fee from state:", consultationFee);
-          console.log("All appointments:", JSON.stringify(doctorAppointments.slice(0, 3), null, 2));
-          
-          const todayAppointmentsList = doctorAppointments.filter(
-            (apt) => {
-              const aptDate = apt.selectedDate ? apt.selectedDate.split('T')[0] : apt.selectedDate;
-              const isToday = aptDate === todayDate;
-              const isConfirmed = apt.status === "confirmed";
-              console.log(`APT: selectedDate='${apt.selectedDate}' → parsed='${aptDate}', todayDate='${todayDate}', isToday=${isToday}, status='${apt.status}' (type: ${typeof apt.status}), isConfirmed=${isConfirmed}, MATCHES=${isToday && isConfirmed}`);
-              return isToday && isConfirmed;
-            }
+          console.log(
+            "All appointments:",
+            JSON.stringify(doctorAppointments.slice(0, 3), null, 2),
           );
-          
-          console.log("Today's CONFIRMED appointments:", todayAppointmentsList.length);
-          
+
+          const todayAppointmentsList = doctorAppointments.filter((apt) => {
+            const aptDate = apt.selectedDate
+              ? apt.selectedDate.split("T")[0]
+              : apt.selectedDate;
+            const isToday = aptDate === todayDate;
+            const isConfirmed = apt.status === "confirmed";
+            console.log(
+              `APT: selectedDate='${apt.selectedDate}' → parsed='${aptDate}', todayDate='${todayDate}', isToday=${isToday}, status='${apt.status}' (type: ${typeof apt.status}), isConfirmed=${isConfirmed}, MATCHES=${isToday && isConfirmed}`,
+            );
+            return isToday && isConfirmed;
+          });
+
+          console.log(
+            "Today's CONFIRMED appointments:",
+            todayAppointmentsList.length,
+          );
+
           const uniquePatientsTodaySet = new Set(
-            todayAppointmentsList.map((apt) => apt.patientEmail || apt.userEmail)
+            todayAppointmentsList.map(
+              (apt) => apt.patientEmail || apt.userEmail,
+            ),
           );
-          
-          const calculatedRevenue = todayAppointmentsList.length * (parseInt(consultationFee) || 0);
-          
+
+          const calculatedRevenue =
+            todayAppointmentsList.length * (parseInt(consultationFee) || 0);
+
           console.log("Calculated stats:", {
             todayAppointmentsCount: todayAppointmentsList.length,
             uniquePatientsCount: uniquePatientsTodaySet.size,
             fee: parseInt(consultationFee) || 0,
             revenue: calculatedRevenue,
           });
-          
+
           setTodayAppointments(todayAppointmentsList.length);
           setUniquePatientsToday(uniquePatientsTodaySet.size);
           setTodayRevenue(calculatedRevenue);
@@ -720,7 +760,7 @@ const DoctorDashboard = () => {
   const loadLabTestOrdersData = useCallback(async () => {
     try {
       const response = await fetch(
-        "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json"
+        "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/lab-test-orders.json",
       );
 
       if (!response.ok) {
@@ -730,10 +770,12 @@ const DoctorDashboard = () => {
       const data = await response.json();
 
       if (data) {
-        const allLabOrders = Object.entries(data)
-          .map(([key, order]) => ({ id: key, ...order }));
+        const allLabOrders = Object.entries(data).map(([key, order]) => ({
+          id: key,
+          ...order,
+        }));
 
-        console.log('DEBUG: Loaded lab orders:', allLabOrders.length, 'orders');
+        console.log("DEBUG: Loaded lab orders:", allLabOrders.length, "orders");
         setLabTestOrders(allLabOrders);
       } else {
         setLabTestOrders([]);
@@ -746,18 +788,30 @@ const DoctorDashboard = () => {
 
   const getLabReportForPrescription = (prescriptionId) => {
     if (!prescriptionId) {
-      console.warn('DEBUG: prescriptionId is null or undefined');
+      console.warn("DEBUG: prescriptionId is null or undefined");
       return null;
     }
-    
-    const report = labTestOrders.find(order => {
-      return order.prescriptionId === prescriptionId && order.reportStatus === 'uploaded';
+
+    const report = labTestOrders.find((order) => {
+      return (
+        order.prescriptionId === prescriptionId &&
+        order.reportStatus === "uploaded"
+      );
     });
-    
+
     if (!report) {
-      console.log('DEBUG: No report found for prescriptionId:', prescriptionId, 'Available orders:', labTestOrders.map(o => ({ id: o.id, prescriptionId: o.prescriptionId, reportStatus: o.reportStatus })));
+      console.log(
+        "DEBUG: No report found for prescriptionId:",
+        prescriptionId,
+        "Available orders:",
+        labTestOrders.map((o) => ({
+          id: o.id,
+          prescriptionId: o.prescriptionId,
+          reportStatus: o.reportStatus,
+        })),
+      );
     }
-    
+
     return report;
   };
 
@@ -1059,9 +1113,24 @@ const DoctorDashboard = () => {
 
   // Compact stats - Updated with calculated values
   const todayStats = [
-    { label: "Patients", value: uniquePatientsToday.toString(), icon: "people", color: "#4ECDC4" },
-    { label: "Appointments", value: todayAppointments.toString(), icon: "calendar", color: "#667eea" },
-    { label: "Revenue", value: `₹${todayRevenue}`, icon: "wallet", color: "#f093fb" },
+    {
+      label: "Patients",
+      value: uniquePatientsToday.toString(),
+      icon: "people",
+      color: "#4ECDC4",
+    },
+    {
+      label: "Appointments",
+      value: todayAppointments.toString(),
+      icon: "calendar",
+      color: "#667eea",
+    },
+    {
+      label: "Revenue",
+      value: `₹${todayRevenue}`,
+      icon: "wallet",
+      color: "#f093fb",
+    },
     { label: "Rating", value: "4.9", icon: "star", color: "#fbbf24" },
   ];
 
@@ -1083,7 +1152,8 @@ const DoctorDashboard = () => {
         name: apt.patientName || apt.userName || "Patient",
         time: apt.selectedTime || apt.appointmentTime || "N/A",
         type: apt.appointmentType || "Consultation",
-        avatar: (apt.patientName || apt.userName || "P")[0]?.toUpperCase() || "P",
+        avatar:
+          (apt.patientName || apt.userName || "P")[0]?.toUpperCase() || "P",
       }));
   })();
 
@@ -1318,7 +1388,9 @@ const DoctorDashboard = () => {
                           </View>
                         </View>
                         <View style={styles.appointmentTime}>
-                          <Text style={styles.timeText}>{appointment.time}</Text>
+                          <Text style={styles.timeText}>
+                            {appointment.time}
+                          </Text>
                           <Ionicons
                             name="chevron-forward"
                             size={16}
@@ -1328,7 +1400,9 @@ const DoctorDashboard = () => {
                       </TouchableOpacity>
                     ))
                   ) : (
-                    <Text style={styles.noAppointmentsText}>No upcoming appointments</Text>
+                    <Text style={styles.noAppointmentsText}>
+                      No upcoming appointments
+                    </Text>
                   )}
                 </View>
               </View>
@@ -1695,7 +1769,7 @@ const DoctorDashboard = () => {
                   <Text style={styles.addPrescriptionButtonText}>Add</Text>
                 </TouchableOpacity>
               </View>
-              
+
               {prescriptionsLoading ? (
                 <View style={styles.centerContainer}>
                   <Text>Loading prescriptions...</Text>
@@ -1728,13 +1802,14 @@ const DoctorDashboard = () => {
                           {prescription.prescriptionDate}
                         </Text>
                       </View>
-                      
+
                       <View style={styles.prescriptionMedicines}>
                         <Text style={styles.medicinesCount}>
-                          {prescription.medicines?.length || 0} medicine{prescription.medicines?.length !== 1 ? 's' : ''}
+                          {prescription.medicines?.length || 0} medicine
+                          {prescription.medicines?.length !== 1 ? "s" : ""}
                         </Text>
                       </View>
-                      
+
                       <View style={styles.prescriptionFooter}>
                         <View style={styles.prescriptionNumber}>
                           <Text style={styles.prescriptionNumberText}>
@@ -1744,7 +1819,7 @@ const DoctorDashboard = () => {
                         <View
                           style={[
                             styles.statusBadge,
-                            prescription.status === 'active'
+                            prescription.status === "active"
                               ? styles.activeBadge
                               : styles.inactiveBadge,
                           ]}
@@ -1754,10 +1829,16 @@ const DoctorDashboard = () => {
                           </Text>
                         </View>
                       </View>
-                      
+
                       <View style={styles.prescriptionCardFooter}>
-                        <Text style={styles.tapToViewText}>Tap to view details</Text>
-                        <Ionicons name="chevron-forward" size={18} color="#4ECDC4" />
+                        <Text style={styles.tapToViewText}>
+                          Tap to view details
+                        </Text>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={18}
+                          color="#4ECDC4"
+                        />
                       </View>
                     </TouchableOpacity>
                   ))}
@@ -1834,43 +1915,61 @@ const DoctorDashboard = () => {
             >
               <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
-            <Text style={styles.prescriptionHeaderTitle}>Prescription Details</Text>
+            <Text style={styles.prescriptionHeaderTitle}>
+              Prescription Details
+            </Text>
             <View style={styles.headerButton} />
           </LinearGradient>
 
           {selectedPrescriptionDetail && (
-            <ScrollView style={styles.prescriptionDocumentContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.prescriptionDocumentContainer}
+              showsVerticalScrollIndicator={false}
+            >
               {/* Document Header */}
               <View style={styles.prescriptionDocumentHeader}>
-                <Text style={styles.prescriptionDocumentTitle}>MEDICAL PRESCRIPTION</Text>
+                <Text style={styles.prescriptionDocumentTitle}>
+                  MEDICAL PRESCRIPTION
+                </Text>
                 <View style={styles.prescriptionDividerLine} />
 
                 <View style={styles.prescriptionInfoRow}>
                   <View style={styles.prescriptionInfoLeft}>
-                    <Text style={styles.prescriptionLabel}>Prescription No:</Text>
-                    <Text style={styles.prescriptionValue}>{selectedPrescriptionDetail.prescriptionNumber}</Text>
+                    <Text style={styles.prescriptionLabel}>
+                      Prescription No:
+                    </Text>
+                    <Text style={styles.prescriptionValue}>
+                      {selectedPrescriptionDetail.prescriptionNumber}
+                    </Text>
                   </View>
                   <View style={styles.prescriptionInfoRight}>
                     <Text style={styles.prescriptionLabel}>Date:</Text>
-                    <Text style={styles.prescriptionValue}>{selectedPrescriptionDetail.prescriptionDate}</Text>
+                    <Text style={styles.prescriptionValue}>
+                      {selectedPrescriptionDetail.prescriptionDate}
+                    </Text>
                   </View>
                 </View>
               </View>
 
               {/* Document Body */}
               <View style={styles.prescriptionDocumentBody}>
-                
                 {/* Patient Info Section */}
                 <View style={styles.prescriptionSection}>
-                  <Text style={styles.prescriptionSectionTitle}>PATIENT INFORMATION</Text>
+                  <Text style={styles.prescriptionSectionTitle}>
+                    PATIENT INFORMATION
+                  </Text>
                   <View style={styles.prescriptionInformationBox}>
                     <View style={styles.prescriptionInfoField}>
                       <Text style={styles.prescriptionFieldLabel}>Name:</Text>
-                      <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.patientName}</Text>
+                      <Text style={styles.prescriptionFieldValue}>
+                        {selectedPrescriptionDetail.patientName}
+                      </Text>
                     </View>
                     <View style={styles.prescriptionInfoField}>
                       <Text style={styles.prescriptionFieldLabel}>Email:</Text>
-                      <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.patientEmail}</Text>
+                      <Text style={styles.prescriptionFieldValue}>
+                        {selectedPrescriptionDetail.patientEmail}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -1879,148 +1978,322 @@ const DoctorDashboard = () => {
                 <View style={styles.prescriptionSection}>
                   <Text style={styles.prescriptionSectionTitle}>DIAGNOSIS</Text>
                   <View style={styles.prescriptionDocument}>
-                    <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.diagnosis}</Text>
+                    <Text style={styles.prescriptionFieldValue}>
+                      {selectedPrescriptionDetail.diagnosis}
+                    </Text>
                   </View>
                 </View>
 
                 {/* Symptoms Section */}
-                {selectedPrescriptionDetail.symptoms && selectedPrescriptionDetail.symptoms.length > 0 && (
+                {selectedPrescriptionDetail.symptoms &&
+                  selectedPrescriptionDetail.symptoms.length > 0 && (
+                    <View style={styles.prescriptionSection}>
+                      <Text style={styles.prescriptionSectionTitle}>
+                        SYMPTOMS
+                      </Text>
+                      <View style={styles.prescriptionDocument}>
+                        <Text style={styles.prescriptionFieldValue}>
+                          {Array.isArray(selectedPrescriptionDetail.symptoms)
+                            ? selectedPrescriptionDetail.symptoms.join(", ")
+                            : selectedPrescriptionDetail.symptoms}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                {/* Medicines Section */}
+                <View style={styles.prescriptionSection}>
+                  <Text style={styles.prescriptionSectionTitle}>
+                    PRESCRIBED MEDICINES
+                  </Text>
+
+                  <View style={styles.prescriptionTableHeader}>
+                    <Text
+                      style={[styles.prescriptionTableHeaderText, { flex: 2 }]}
+                    >
+                      Medicine
+                    </Text>
+                    <Text
+                      style={[styles.prescriptionTableHeaderText, { flex: 1 }]}
+                    >
+                      Dosage
+                    </Text>
+                    <Text
+                      style={[
+                        styles.prescriptionTableHeaderText,
+                        { flex: 1.5 },
+                      ]}
+                    >
+                      Frequency
+                    </Text>
+                    <Text
+                      style={[styles.prescriptionTableHeaderText, { flex: 1 }]}
+                    >
+                      Duration
+                    </Text>
+                  </View>
+
+                  {selectedPrescriptionDetail.medicines &&
+                    selectedPrescriptionDetail.medicines.map(
+                      (medicine, index) => (
+                        <View key={index} style={styles.prescriptionTableRow}>
+                          <View
+                            style={[styles.prescriptionTableCell, { flex: 2 }]}
+                          >
+                            <Text style={styles.prescriptionTableCellText}>
+                              {medicine.name}
+                            </Text>
+                          </View>
+                          <View
+                            style={[styles.prescriptionTableCell, { flex: 1 }]}
+                          >
+                            <Text style={styles.prescriptionTableCellText}>
+                              {medicine.dosage}
+                            </Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.prescriptionTableCell,
+                              { flex: 1.5 },
+                            ]}
+                          >
+                            <Text style={styles.prescriptionTableCellText}>
+                              {medicine.frequency}
+                            </Text>
+                          </View>
+                          <View
+                            style={[styles.prescriptionTableCell, { flex: 1 }]}
+                          >
+                            <Text style={styles.prescriptionTableCellText}>
+                              {medicine.duration}
+                            </Text>
+                          </View>
+                        </View>
+                      ),
+                    )}
+                </View>
+
+                {/* Doctor's Advice Section */}
+                {selectedPrescriptionDetail.advice &&
+                  selectedPrescriptionDetail.advice.length > 0 && (
+                    <View style={styles.prescriptionSection}>
+                      <Text style={styles.prescriptionSectionTitle}>
+                        DOCTOR'S ADVICE
+                      </Text>
+                      {Array.isArray(selectedPrescriptionDetail.advice) ? (
+                        selectedPrescriptionDetail.advice.map(
+                          (advice, index) => (
+                            <View
+                              key={index}
+                              style={styles.prescriptionAdviceRow}
+                            >
+                              <Text style={styles.prescriptionAdviceNumber}>
+                                •{" "}
+                              </Text>
+                              <Text style={styles.prescriptionAdviceText}>
+                                {advice}
+                              </Text>
+                            </View>
+                          ),
+                        )
+                      ) : (
+                        <Text style={styles.prescriptionFieldValue}>
+                          {selectedPrescriptionDetail.advice}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                {/* Next Visit Section */}
+                {selectedPrescriptionDetail.nextVisit && (
                   <View style={styles.prescriptionSection}>
-                    <Text style={styles.prescriptionSectionTitle}>SYMPTOMS</Text>
+                    <Text style={styles.prescriptionSectionTitle}>
+                      NEXT VISIT
+                    </Text>
                     <View style={styles.prescriptionDocument}>
+                      <Text style={styles.prescriptionFieldLabel}>
+                        Scheduled Date:
+                      </Text>
                       <Text style={styles.prescriptionFieldValue}>
-                        {Array.isArray(selectedPrescriptionDetail.symptoms) 
-                          ? selectedPrescriptionDetail.symptoms.join(', ') 
-                          : selectedPrescriptionDetail.symptoms}
+                        {selectedPrescriptionDetail.nextVisit}
                       </Text>
                     </View>
                   </View>
                 )}
 
-                {/* Medicines Section */}
-                <View style={styles.prescriptionSection}>
-                  <Text style={styles.prescriptionSectionTitle}>PRESCRIBED MEDICINES</Text>
-                  
-                  <View style={styles.prescriptionTableHeader}>
-                    <Text style={[styles.prescriptionTableHeaderText, { flex: 2 }]}>Medicine</Text>
-                    <Text style={[styles.prescriptionTableHeaderText, { flex: 1 }]}>Dosage</Text>
-                    <Text style={[styles.prescriptionTableHeaderText, { flex: 1.5 }]}>Frequency</Text>
-                    <Text style={[styles.prescriptionTableHeaderText, { flex: 1 }]}>Duration</Text>
-                  </View>
-
-                  {selectedPrescriptionDetail.medicines && selectedPrescriptionDetail.medicines.map((medicine, index) => (
-                    <View key={index} style={styles.prescriptionTableRow}>
-                      <View style={[styles.prescriptionTableCell, { flex: 2 }]}>
-                        <Text style={styles.prescriptionTableCellText}>{medicine.name}</Text>
-                      </View>
-                      <View style={[styles.prescriptionTableCell, { flex: 1 }]}>
-                        <Text style={styles.prescriptionTableCellText}>{medicine.dosage}</Text>
-                      </View>
-                      <View style={[styles.prescriptionTableCell, { flex: 1.5 }]}>
-                        <Text style={styles.prescriptionTableCellText}>{medicine.frequency}</Text>
-                      </View>
-                      <View style={[styles.prescriptionTableCell, { flex: 1 }]}>
-                        <Text style={styles.prescriptionTableCellText}>{medicine.duration}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Doctor's Advice Section */}
-                {selectedPrescriptionDetail.advice && selectedPrescriptionDetail.advice.length > 0 && (
-                  <View style={styles.prescriptionSection}>
-                    <Text style={styles.prescriptionSectionTitle}>DOCTOR'S ADVICE</Text>
-                    {Array.isArray(selectedPrescriptionDetail.advice) 
-                      ? selectedPrescriptionDetail.advice.map((advice, index) => (
-                          <View key={index} style={styles.prescriptionAdviceRow}>
-                            <Text style={styles.prescriptionAdviceNumber}>• </Text>
-                            <Text style={styles.prescriptionAdviceText}>{advice}</Text>
-                          </View>
-                        ))
-                      : <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.advice}</Text>
-                    }
-                  </View>
-                )}
-
-                {/* Next Visit Section */}
-                {selectedPrescriptionDetail.nextVisit && (
-                  <View style={styles.prescriptionSection}>
-                    <Text style={styles.prescriptionSectionTitle}>NEXT VISIT</Text>
-                    <View style={styles.prescriptionDocument}>
-                      <Text style={styles.prescriptionFieldLabel}>Scheduled Date:</Text>
-                      <Text style={styles.prescriptionFieldValue}>{selectedPrescriptionDetail.nextVisit}</Text>
-                    </View>
-                  </View>
-                )}
-
                 {/* Lab Tests Section */}
-                {selectedPrescriptionDetail.requestedLabTests && selectedPrescriptionDetail.requestedLabTests.length > 0 && (
-                  <View style={styles.prescriptionSection}>
-                    <View style={styles.prescriptionLabTestHeader}>
-                      <MaterialCommunityIcons name="flask" size={22} color="#4ECDC4" />
-                      <Text style={styles.prescriptionSectionTitle}>REQUESTED LAB TESTS</Text>
-                    </View>
-                    
-                    {selectedPrescriptionDetail.requestedLabTests.map((test, index) => {
-                      const hasReport = getLabReportForPrescription(selectedPrescriptionDetail.id) ? true : false;
-                      const displayStatus = hasReport ? 'completed' : test.status;
-                      
-                      return (
-                        <View key={index} style={styles.prescriptionLabTestCard}>
-                          <View style={styles.prescriptionLabTestCardHeader}>
-                            <View style={styles.prescriptionLabTestNumber}>
-                              <Text style={styles.prescriptionLabTestNumberText}>{index + 1}</Text>
-                            </View>
-                            <View style={styles.prescriptionLabTestInfo}>
-                              <Text style={styles.prescriptionLabTestName}>{test.testName}</Text>
-                              <Text style={styles.prescriptionLabTestDescription}>{test.testDescription}</Text>
-                            </View>
-                            <View style={[styles.prescriptionLabTestStatus, { backgroundColor: displayStatus === 'pending' ? '#fef3c7' : '#d1fae5' }]}>
-                              <Text style={[styles.prescriptionLabTestStatusText, { color: displayStatus === 'pending' ? '#b45309' : '#047857' }]}>
-                                {displayStatus === 'pending' ? 'Pending' : 'Completed'}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.prescriptionLabTestDateInfo}>
-                            <Ionicons name="calendar" size={14} color="#999" />
-                            <Text style={styles.prescriptionLabTestDate}>Requested: {test.requestedDate}</Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-
-                    {/* Lab Report Section */}
-                    {getLabReportForPrescription(selectedPrescriptionDetail.id) && (
-                      <View style={[styles.prescriptionSection, { marginTop: 20, backgroundColor: '#e8f5e9', borderLeftWidth: 4, borderLeftColor: '#4CAF50' }]}>
-                        <View style={styles.reportHeader}>
-                          <Ionicons name="document" size={24} color="#4CAF50" />
-                          <Text style={[styles.prescriptionSectionTitle, { color: '#4CAF50', marginLeft: 10 }]}>LAB REPORT</Text>
-                        </View>
-                        <View style={styles.reportInfo}>
-                          <Text style={styles.reportInfoText}>
-                            ✓ Report uploaded on {getLabReportForPrescription(selectedPrescriptionDetail.id).reportUploadedDate}
-                          </Text>
-                          <Text style={styles.reportInfoText}>
-                            Time: {getLabReportForPrescription(selectedPrescriptionDetail.id).reportUploadedTime}
-                          </Text>
-                          <Text style={styles.reportInfoText}>
-                            Patient: {getLabReportForPrescription(selectedPrescriptionDetail.id).patientName}
-                          </Text>
-                        </View>
-                        <TouchableOpacity 
-                          style={styles.viewReportButton}
-                          onPress={() => handleViewReport(getLabReportForPrescription(selectedPrescriptionDetail.id))}
-                        >
-                          <Ionicons name="image" size={18} color="white" />
-                          <Text style={styles.viewReportButtonText}>View Report Image</Text>
-                        </TouchableOpacity>
+                {selectedPrescriptionDetail.requestedLabTests &&
+                  selectedPrescriptionDetail.requestedLabTests.length > 0 && (
+                    <View style={styles.prescriptionSection}>
+                      <View style={styles.prescriptionLabTestHeader}>
+                        <MaterialCommunityIcons
+                          name="flask"
+                          size={22}
+                          color="#4ECDC4"
+                        />
+                        <Text style={styles.prescriptionSectionTitle}>
+                          REQUESTED LAB TESTS
+                        </Text>
                       </View>
-                    )}
-                  </View>
-                )}
 
+                      {selectedPrescriptionDetail.requestedLabTests.map(
+                        (test, index) => {
+                          const hasReport = getLabReportForPrescription(
+                            selectedPrescriptionDetail.id,
+                          )
+                            ? true
+                            : false;
+                          const displayStatus = hasReport
+                            ? "completed"
+                            : test.status;
+
+                          return (
+                            <View
+                              key={index}
+                              style={styles.prescriptionLabTestCard}
+                            >
+                              <View
+                                style={styles.prescriptionLabTestCardHeader}
+                              >
+                                <View style={styles.prescriptionLabTestNumber}>
+                                  <Text
+                                    style={styles.prescriptionLabTestNumberText}
+                                  >
+                                    {index + 1}
+                                  </Text>
+                                </View>
+                                <View style={styles.prescriptionLabTestInfo}>
+                                  <Text style={styles.prescriptionLabTestName}>
+                                    {test.testName}
+                                  </Text>
+                                  <Text
+                                    style={
+                                      styles.prescriptionLabTestDescription
+                                    }
+                                  >
+                                    {test.testDescription}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.prescriptionLabTestStatus,
+                                    {
+                                      backgroundColor:
+                                        displayStatus === "pending"
+                                          ? "#fef3c7"
+                                          : "#d1fae5",
+                                    },
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.prescriptionLabTestStatusText,
+                                      {
+                                        color:
+                                          displayStatus === "pending"
+                                            ? "#b45309"
+                                            : "#047857",
+                                      },
+                                    ]}
+                                  >
+                                    {displayStatus === "pending"
+                                      ? "Pending"
+                                      : "Completed"}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.prescriptionLabTestDateInfo}>
+                                <Ionicons
+                                  name="calendar"
+                                  size={14}
+                                  color="#999"
+                                />
+                                <Text style={styles.prescriptionLabTestDate}>
+                                  Requested: {test.requestedDate}
+                                </Text>
+                              </View>
+                            </View>
+                          );
+                        },
+                      )}
+
+                      {/* Lab Report Section */}
+                      {getLabReportForPrescription(
+                        selectedPrescriptionDetail.id,
+                      ) && (
+                        <View
+                          style={[
+                            styles.prescriptionSection,
+                            {
+                              marginTop: 20,
+                              backgroundColor: "#e8f5e9",
+                              borderLeftWidth: 4,
+                              borderLeftColor: "#4CAF50",
+                            },
+                          ]}
+                        >
+                          <View style={styles.reportHeader}>
+                            <Ionicons
+                              name="document"
+                              size={24}
+                              color="#4CAF50"
+                            />
+                            <Text
+                              style={[
+                                styles.prescriptionSectionTitle,
+                                { color: "#4CAF50", marginLeft: 10 },
+                              ]}
+                            >
+                              LAB REPORT
+                            </Text>
+                          </View>
+                          <View style={styles.reportInfo}>
+                            <Text style={styles.reportInfoText}>
+                              ✓ Report uploaded on{" "}
+                              {
+                                getLabReportForPrescription(
+                                  selectedPrescriptionDetail.id,
+                                ).reportUploadedDate
+                              }
+                            </Text>
+                            <Text style={styles.reportInfoText}>
+                              Time:{" "}
+                              {
+                                getLabReportForPrescription(
+                                  selectedPrescriptionDetail.id,
+                                ).reportUploadedTime
+                              }
+                            </Text>
+                            <Text style={styles.reportInfoText}>
+                              Patient:{" "}
+                              {
+                                getLabReportForPrescription(
+                                  selectedPrescriptionDetail.id,
+                                ).patientName
+                              }
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.viewReportButton}
+                            onPress={() =>
+                              handleViewReport(
+                                getLabReportForPrescription(
+                                  selectedPrescriptionDetail.id,
+                                ),
+                              )
+                            }
+                          >
+                            <Ionicons name="image" size={18} color="white" />
+                            <Text style={styles.viewReportButtonText}>
+                              View Report Image
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  )}
               </View>
-              
+
               <View style={styles.prescriptionDocumentPadding} />
             </ScrollView>
           )}
@@ -2049,13 +2322,23 @@ const DoctorDashboard = () => {
                 {/* Report Info */}
                 <View style={styles.reportDetailSection}>
                   <Text style={styles.reportDetailLabel}>Test Report</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.testsList}</Text>
-                  
-                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>Uploaded Date</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.reportUploadedDate}</Text>
-                  
-                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>Uploaded Time</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.reportUploadedTime}</Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.testsList}
+                  </Text>
+
+                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>
+                    Uploaded Date
+                  </Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.reportUploadedDate}
+                  </Text>
+
+                  <Text style={[styles.reportDetailLabel, { marginTop: 12 }]}>
+                    Uploaded Time
+                  </Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.reportUploadedTime}
+                  </Text>
                 </View>
 
                 {/* Report Image */}
@@ -2063,7 +2346,9 @@ const DoctorDashboard = () => {
                   <View style={styles.reportImageContainer}>
                     <Text style={styles.reportImageLabel}>Report Image</Text>
                     <Image
-                      source={{ uri: `data:image/jpeg;base64,${selectedReport.reportImage}` }}
+                      source={{
+                        uri: `data:image/jpeg;base64,${selectedReport.reportImage}`,
+                      }}
                       style={styles.reportImage}
                       resizeMode="contain"
                     />
@@ -2072,12 +2357,26 @@ const DoctorDashboard = () => {
 
                 {/* Patient Info */}
                 <View style={styles.reportDetailSection}>
-                  <Text style={styles.reportDetailLabel}>Patient Information</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.patientName}</Text>
-                  <Text style={[styles.reportDetailValue, { fontSize: 12, color: '#6B7280', marginTop: 4 }]}>
+                  <Text style={styles.reportDetailLabel}>
+                    Patient Information
+                  </Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.patientName}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.reportDetailValue,
+                      { fontSize: 12, color: "#6B7280", marginTop: 4 },
+                    ]}
+                  >
                     {selectedReport.patientEmail}
                   </Text>
-                  <Text style={[styles.reportDetailValue, { fontSize: 12, color: '#6B7280', marginTop: 2 }]}>
+                  <Text
+                    style={[
+                      styles.reportDetailValue,
+                      { fontSize: 12, color: "#6B7280", marginTop: 2 },
+                    ]}
+                  >
                     {selectedReport.patientPhone}
                   </Text>
                 </View>
@@ -2085,7 +2384,9 @@ const DoctorDashboard = () => {
                 {/* Diagnosis */}
                 <View style={styles.reportDetailSection}>
                   <Text style={styles.reportDetailLabel}>Diagnosis</Text>
-                  <Text style={styles.reportDetailValue}>{selectedReport.diagnosis}</Text>
+                  <Text style={styles.reportDetailValue}>
+                    {selectedReport.diagnosis}
+                  </Text>
                 </View>
               </ScrollView>
             )}

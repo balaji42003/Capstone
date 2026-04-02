@@ -15,7 +15,7 @@
 // ===========================================
 export const API_KEYS = {
   GOOGLE_GEMINI:
-    process.env.GOOGLE_API_KEY || "AIzaSyCAJv2nb48yZ0UOmUoJ4ZUZ6h6ZEVeusCY",
+    process.env.GOOGLE_API_KEY || "AIzaSyBvGU9anUzfqhdX28UJ2S4CJ9t3vZ5O96A",
   // Add other API keys here as needed
 };
 
@@ -23,7 +23,7 @@ export const API_KEYS = {
 // BASE URLs
 // ===========================================
 // Machine Learning Server IP - Change this single IP to update all ML services
-const ML_SERVER_IP = "10.2.14.180";
+const ML_SERVER_IP = "10.229.12.246";
 
 const BASE_URLS = {
   FIREBASE:
@@ -60,8 +60,10 @@ export const API_ENDPOINTS = {
     USER_DETAILS_BY_ID: (id) => `${BASE_URLS.FIREBASE}/user-details/${id}.json`,
     VERIFICATION_BY_ID: (id) => `${BASE_URLS.FIREBASE}/verification/${id}.json`,
     APPOINTMENT_BY_ID: (id) => `${BASE_URLS.FIREBASE}/appointments/${id}.json`,
-    PRESCRIPTION_BY_ID: (id) => `${BASE_URLS.FIREBASE}/prescriptions/${id}.json`,
-    MEDICINE_ORDER_BY_ID: (id) => `${BASE_URLS.FIREBASE}/medicine-orders/${id}.json`,
+    PRESCRIPTION_BY_ID: (id) =>
+      `${BASE_URLS.FIREBASE}/prescriptions/${id}.json`,
+    MEDICINE_ORDER_BY_ID: (id) =>
+      `${BASE_URLS.FIREBASE}/medicine-orders/${id}.json`,
   },
 
   // IoT Firebase
@@ -95,6 +97,12 @@ export const API_ENDPOINTS = {
     SEND: `${BASE_URLS.EMAIL_SERVICE}/send-email`,
     SEND_MEETING_INVITE: `${BASE_URLS.EMAIL_SERVICE}/send-meeting-invite`,
     STATUS: `${BASE_URLS.EMAIL_SERVICE}/`,
+  },
+
+  // Flask Backend - Delivery & OTP Service (same as EMAIL_SERVICE)
+  DELIVERY: {
+    SEND_OTP: `${BASE_URLS.EMAIL_SERVICE}/send-medicine-delivery-otp`,
+    WELCOME_EMAIL: `${BASE_URLS.EMAIL_SERVICE}/welcome`,
   },
 };
 
