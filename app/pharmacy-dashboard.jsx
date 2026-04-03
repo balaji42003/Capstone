@@ -495,6 +495,52 @@ const PharmacyDashboard = () => {
           );
         }
 
+        // Update delivery order status to "delivered" in Firebase
+        if (currentDeliveryOrderId) {
+          const updateResponse = await fetch(
+            `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/delivery-orders/${currentDeliveryOrderId}.json`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                deliveryStatus: "delivered",
+                lastUpdated: new Date().toISOString(),
+              }),
+            },
+          );
+
+          if (updateResponse.ok) {
+            console.log("Order deliveryStatus updated to delivered:", currentDeliveryOrderId);
+          } else {
+            console.log("Failed to update order deliveryStatus");
+          }
+        }
+
+        // Also update the medicine order status to "delivered"
+        if (currentMedicineOrderId) {
+          const medicineUpdateResponse = await fetch(
+            `https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app/medicine-orders/${currentMedicineOrderId}.json`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                orderStatus: "delivered",
+                deliveredAt: new Date().toISOString(),
+              }),
+            },
+          );
+
+          if (medicineUpdateResponse.ok) {
+            console.log("Medicine order status updated to delivered:", currentMedicineOrderId);
+          } else {
+            console.log("Failed to update medicine order status");
+          }
+        }
+
         Alert.alert("Success", "OTP Verified! Welcome email sent.");
         setShowDeliveryOTPModal(false);
         setEnteredOTP("");
@@ -1101,7 +1147,7 @@ const PharmacyDashboard = () => {
         case "in_transit":
           return "#d4edda";
         case "delivered":
-          return "#d4edda";
+          return "#28a745"; // Dark green for completed delivery
         default:
           return "#e2e3e5";
       }
@@ -1118,7 +1164,7 @@ const PharmacyDashboard = () => {
         case "in_transit":
           return "#0a3622";
         case "delivered":
-          return "#155724";
+          return "#ffffff"; // White text for dark green background
         default:
           return "#383d41";
       }

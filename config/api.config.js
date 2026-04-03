@@ -15,17 +15,18 @@
 // ===========================================
 export const API_KEYS = {
   GOOGLE_GEMINI:
-    process.env.GOOGLE_API_KEY || "AIzaSyBvGU9anUzfqhdX28UJ2S4CJ9t3vZ5O96A",
+    process.env.GOOGLE_API_KEY || "",
   // Add other API keys here as needed
 };
 
 // ===========================================
 // BASE URLs
 // ===========================================
-// Machine Learning Server IP - Change this single IP to update all ML services
-const ML_SERVER_IP = "10.229.12.246";
+// Machine Learning Server IP - Will be updated from Firebase listener
+let ML_SERVER_IP = "10.229.12.246"; // Default fallback
 
-const BASE_URLS = {
+// Helper function to create BASE_URLS with current IP
+const createBaseUrls = () => ({
   FIREBASE:
     "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app",
   IOT_FIREBASE:
@@ -38,12 +39,12 @@ const BASE_URLS = {
   SKIN_DISEASE: `http://${ML_SERVER_IP}:5002`,
   EYE_CONDITION: `http://${ML_SERVER_IP}:5000`,
   EMAIL_SERVICE: `http://${ML_SERVER_IP}:5008`,
-};
+});
 
-// ===========================================
-// API ENDPOINTS
-// ===========================================
-export const API_ENDPOINTS = {
+let BASE_URLS = createBaseUrls();
+
+// Helper function to create API_ENDPOINTS with current BASE_URLS
+const createApiEndpoints = () => ({
   // Firebase Realtime Database
   FIREBASE: {
     DOCTORS: `${BASE_URLS.FIREBASE}/doctors.json`,
@@ -104,7 +105,37 @@ export const API_ENDPOINTS = {
     SEND_OTP: `${BASE_URLS.EMAIL_SERVICE}/send-medicine-delivery-otp`,
     WELCOME_EMAIL: `${BASE_URLS.EMAIL_SERVICE}/welcome`,
   },
+});
+
+let API_ENDPOINTS = createApiEndpoints();
+
+// ===========================================
+// Firebase Listener - Auto-update IP from Firebase (REST API)
+// ===========================================
+const FIREBASE_DB_URL = "https://fresh-a29f6-default-rtdb.asia-southeast1.firebasedatabase.app";
+const IP_CONFIG_PATH = "admin/mlServerConfig/ip.json";
+
+// Fetch IP from Firebase on app start
+const fetchMLServerIpFromFirebase = async () => {
+  try {
+    const response = await fetch(`${FIREBASE_DB_URL}/${IP_CONFIG_PATH}`);
+    if (response.ok) {
+      const newIp = await response.json();
+      if (newIp && newIp !== ML_SERVER_IP) {
+        ML_SERVER_IP = newIp;
+        BASE_URLS = createBaseUrls();
+        API_ENDPOINTS = createApiEndpoints();
+        console.log("✅ ML Server IP updated from Firebase:", newIp);
+      }
+    }
+  } catch (error) {
+    console.warn("⚠️ Firebase IP fetch error:", error.message);
+    console.log("Using fallback IP:", ML_SERVER_IP);
+  }
 };
+
+// Fetch immediately on app load - ONLY ONCE
+fetchMLServerIpFromFirebase();
 
 // ===========================================
 // HELPER FUNCTIONS
@@ -147,6 +178,9 @@ export const getConfig = () => ({
   endpoints: API_ENDPOINTS,
   baseUrls: BASE_URLS,
 });
+
+// Export for re-export in modules
+export { API_ENDPOINTS, BASE_URLS, ML_SERVER_IP };
 
 // ===========================================
 // CONFIGURATION MANAGEMENT
